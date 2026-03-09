@@ -1,37 +1,60 @@
-# GOAT TS Architecture
+# GOAT-TS
 
-**Author:** Ben Michalek ([BoggersTheFish](https://github.com/BoggersTheFish))
+**GOAT-TS** (Thinking System) is a local-first scaffold for a knowledge-graph–driven cognition architecture: ingest text into a graph, run spreading activation and memory dynamics, then reason over tension and hypotheses. It validates the design on a single machine while keeping boundaries for scaling to Spark, Redis, and Kubernetes.
 
-This repository implements a local-first scaffold for the Thinking System (TS) architecture described in the plan. It is organized to validate the architecture on a single machine first, while keeping the module boundaries needed for later scaling to Spark, GPUs, Redis, and Kubernetes.
+**Author:** [Ben Michalek](https://github.com/BoggersTheFish) (BoggersTheFish)
 
-## Stack
+[![License](https://img.shields.io/badge/License-Open%20Source-blue.svg)](LICENSE)  
+*Python 3.11+ · NebulaGraph · PyTorch · LangChain*
 
-- Python 3.11+
-- NebulaGraph for graph storage
-- Spark for ETL and batch processing
-- Hugging Face / LangChain for semantic extraction
-- PyTorch and NumPy for simulation math
-- Prometheus and Grafana for monitoring
+---
 
-## Repository Layout
+## Table of contents
 
-```text
-GOAT/
-├── docker/
-├── examples/
-├── infra/
-├── src/
-├── configs/
-├── scripts/
-├── tests/
-├── requirements.txt
-└── README.md
-```
-See `examples/README.md` for sample input and example export shape.
+- [Features](#features)
+- [Documentation](#documentation)
+- [Quick start](#quick-start)
+- [Cognition loop & API](#cognition-loop--api)
+- [Development roadmap](#development-roadmap)
+- [Repository layout](#repository-layout)
+- [Configuration & environment](#configuration--environment)
+- [Ingestion & reasoning](#ingestion--reasoning)
+- [Thinking Wave graph](#thinking-wave-cognition-graph)
+- [Portability](#portability)
+- [License](#license)
 
-## Quick Start
+---
 
-Run all commands from the **repository root**. Use `python -m pytest` (and `python scripts/...`) so the same command works on Windows, macOS, and Linux.
+## Features
+
+- **Graph-backed cognition:** NebulaGraph storage with in-memory dry-run; concept nodes, waves (cognitive episodes), and `relates` / `in_wave` edges.
+- **Spreading activation & memory:** ACT-R style propagation, decay, and state transitions (ACTIVE → DORMANT → DEEP) with optional gravity simulation.
+- **Reasoning loop:** Query → subgraph retrieval → tension computation → hypothesis generation; optional Redis cache and LLM integration.
+- **Online learning & reflection:** Stream ingestion, web search, low-coherence triggers; reflection (tension → meta-waves, hypothesis nodes); long-term self-reflection (wave gaps → goal nodes).
+- **Advanced capabilities:** Goal generation from tension, curiosity-driven exploration, internal simulation sandbox, knowledge compression (PyG → FAISS archive).
+- **API & UI:** FastAPI server (`/run_demo`, `/reasoning`, `/health`); Streamlit visualization; optional Tk installer/dashboard (`goat_ui.py`).
+- **Cross-platform:** Windows, macOS, Linux — same commands from repo root; see [PLATFORM.md](PLATFORM.md).
+
+---
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [README.md](README.md) | This file — overview, quick start, usage. |
+| [README_ARCHITECTURE.md](README_ARCHITECTURE.md) | Technical architecture and compliance (Steps 1–7). |
+| [ROADMAP.md](ROADMAP.md) | Five-stage development roadmap and commit guidance. |
+| [CODEBASE.md](CODEBASE.md) | Codebase reference: modules, data models, scripts. |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute, test, and open PRs. |
+| [PLATFORM.md](PLATFORM.md) | Portability and per-OS notes. |
+| [examples/README.md](examples/README.md) | Sample inputs, export shape, API request examples. |
+| [CHANGELOG.md](CHANGELOG.md) | Documentation and feature change summary. |
+
+---
+
+## Quick start
+
+Run all commands from the **repository root**. Use `python -m pytest` and `python scripts/...` (or `python -m src....`) so the same invocations work on Windows, macOS, and Linux.
 
 ### 1. Virtual environment and dependencies
 
@@ -42,52 +65,143 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-**macOS / Linux (bash):**
+**macOS / Linux:**
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. Start local infrastructure (NebulaGraph, Redis, Spark)
+### 2. Sanity check (no Docker)
 
-**All platforms (Docker Compose V2):**
+```bash
+python scripts/apply_schema.py --dry-run
+python -m pytest tests/test_placeholder.py -v
+```
+
+### 3. Optional: start infrastructure (NebulaGraph, Redis, Spark)
+
 ```bash
 docker compose -f docker/docker-compose.yml up -d
 ```
 
-**Windows only (alternative):** `.\scripts\start-local.ps1`  
-**macOS / Linux only (alternative):** `bash scripts/start-local.sh` or `chmod +x scripts/start-local.sh && ./scripts/start-local.sh`
-
-Wait until services are up: `docker compose -f docker/docker-compose.yml ps` should show graphd, storaged, metad, redis, spark as running.
-
-### 3. Apply the graph schema
+Wait until services are up (`docker compose -f docker/docker-compose.yml ps`). Then:
 
 ```bash
-python scripts/apply_schema.py --dry-run
 python scripts/apply_schema.py --live
-```
-
-(On Windows you can use `python .\scripts\apply_schema.py`; forward slashes in paths work in Python on all platforms.)
-
-### Connection and auth
-
-- **NebulaGraph** default is `root` / `nebula`, host `127.0.0.1`, port `9669`. Set in `configs/graph.yaml`, or use a **`.env`** file (see `examples/.env.example` or root `.env.example`) so credentials are not committed: `NEBULA_HOST`, `NEBULA_PORT`, `NEBULA_USERNAME`, `NEBULA_PASSWORD`. The client loads these via `python-dotenv` and overrides the YAML values when present.
-- Scripts use **`--live`** to talk to the real graph; without `--live` they use dry-run (no connection). Prefer **`--dry-run`** first when a script supports it.
-
-### 4. Generate a local sample graph
-
-```bash
 python scripts/generate_sample_100k.py --node-count 1000 --edge-count 2500 --live
 ```
 
-### 5. Run smoke tests
+### 4. Run tests
 
 ```bash
 python -m pytest -q
 ```
 
-At least one trivial test (`tests/test_placeholder.py`) and the milestone tests should pass. See `pytest.ini` for ignored modules.
+---
+
+## Cognition loop & API
+
+### Cognition loop (CLI)
+
+Run the AGI cognition loop (seeds → spreading activation → memory tick → optional gravity):
+
+```bash
+python -m src.agi_loop.demo_loop --dry-run --seed-labels concept --ticks 10 --export-dot demo_out.dot
+```
+
+With forces and optional capabilities (self-reflection, curiosity, goal generator):
+
+```bash
+python -m src.agi_loop.demo_loop --dry-run --seed-labels concept --ticks 10 --enable-forces --enable-goal-generator --enable-curiosity
+```
+
+### HTTP API
+
+Start the API server (from repo root):
+
+```bash
+uvicorn scripts.serve_api:app --reload --host 0.0.0.0 --port 8000
+```
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /run_demo` | Run cognition demo. Body: `{"ticks": 5, "dry_run": true, "seed_labels": "concept"}`. |
+| `POST /reasoning` | Run reasoning loop. Body: `{"query": "your query", "live": false}`. |
+| `GET /health` | Health check. |
+
+Example:
+
+```bash
+curl -X POST http://localhost:8000/run_demo -H "Content-Type: application/json" -d "{\"ticks\": 3, \"dry_run\": true}"
+```
+
+### Streamlit visualization
+
+```bash
+streamlit run scripts/streamlit_viz.py
+```
+
+Run a short cognition demo (dry-run) or view graph stats from the sidebar.
+
+### Reasoning demo (script)
+
+```bash
+python scripts/run_reasoning_demo.py --query "Wikipedia supports free knowledge and Wikidata supports structured facts." --live
+```
+
+Omit `--live` for dry-run graph context.
+
+---
+
+## Development roadmap
+
+The project follows a **five-stage roadmap**; see [ROADMAP.md](ROADMAP.md) for full detail and suggested commit messages.
+
+| Stage | Scope | Quick test |
+|-------|--------|------------|
+| **1** | Core loop (seeds → spread → memory_tick → forces; CLI, Graphviz) | `python -m src.agi_loop.demo_loop --dry-run --ticks 5` |
+| **2** | Online learning, reflection | `python -m pytest tests/milestone_roadmap_stage2.py -v` |
+| **3** | Distributed (Spark/Redis/K8s), GPU opt | Docker Compose; `infra/k8s/deployment.yaml`; `configs/simulation.yaml` (`use_gpu`) |
+| **4** | Advanced (pred, sim, curiosity), hybrid LLM, Streamlit | `streamlit run scripts/streamlit_viz.py` |
+| **5** | Benchmarks, API, docs | `python -m pytest tests/test_benchmarks_step6.py tests/test_serve_api.py -v` |
+
+---
+
+## Repository layout
+
+```text
+GOAT/
+├── configs/          # graph.yaml, reasoning.yaml, simulation.yaml
+├── docker/           # Docker Compose (NebulaGraph, Redis, Spark)
+├── examples/         # Sample input, export shape, API request examples
+├── infra/            # Terraform, Ansible, K8s (deployment scaffolding)
+├── scripts/          # Entry points: schema, ingestion, demos, export, API, Streamlit
+├── src/               # Core packages
+│   ├── agi_loop/     # Cognition demo loop (demo_loop.py)
+│   ├── graph/        # Client, models, schema, cognition, vector index, compression
+│   ├── ingestion/    # Extraction pipeline, LLM extract, online ingest
+│   ├── reasoning/    # Loop, tension, reflection, goal generator, curiosity, sandbox
+│   ├── simulation/    # Gravity, loop
+│   ├── physics/      # Forces, layout
+│   └── monitoring/   # Metrics (Prometheus)
+├── tests/            # Pytest suite (milestones, benchmarks, API, graph, reasoning)
+├── requirements.txt
+├── pytest.ini
+└── README.md
+```
+
+---
+
+## Configuration & environment
+
+- **NebulaGraph:** Default `root` / `nebula`, host `127.0.0.1`, port `9669`. Configure in `configs/graph.yaml` or override via a **`.env`** file in the repo root (see [.env.example](.env.example)): `NEBULA_HOST`, `NEBULA_PORT`, `NEBULA_USERNAME`, `NEBULA_PASSWORD`. The client loads these with `python-dotenv`.
+- **Scripts:** Use **`--live`** to talk to the real graph; without it, scripts use dry-run (in-memory). Prefer **`--dry-run`** first when available.
+- **GPU:** Optional CUDA/FAISS-GPU via `configs/simulation.yaml` (`use_gpu`) or env `GOAT_USE_GPU=1`; see [ROADMAP.md](ROADMAP.md) Stage 3.
+
+---
+
+## Ingestion & reasoning
 
 ### Verification and debug (after ingestion)
 
@@ -96,67 +210,40 @@ At least one trivial test (`tests/test_placeholder.py`) and the milestone tests 
 - **Export subgraph (JSON + optional PNG):** `python scripts/export_subgraph.py --concept "Concept 1" --live --output out.json --plot out.png`
 - **Gravity demo (no DB write):** `python scripts/run_gravity_demo.py --live --iterations 100 --output positions.json --plot layout.png`
 
-### Reasoning
+### Dump acquisition, Spark ETL, batch ingestion
 
-Run a reasoning-loop demo (query → activated nodes, tension, hypotheses):
+1. **Acquire:** `scripts/acquire_dumps.py` — `--source sample | wikipedia-api | wikipedia-sample`; writes to `data/raw/` (e.g. `wikipedia/abstracts.txt`).
+2. **Spark ETL:** `scripts/run_spark_etl.py` — reads text, writes Parquet with `value` column. Requires Java (`JAVA_HOME`).
+3. **Extraction:** `python -m src.ingestion.extraction_pipeline --input-path <path> [--live]` or combined: `scripts/run_batch_ingestion.py --acquire [--spark-etl] [--live]`.
 
-```bash
-python scripts/run_reasoning_demo.py --query "Wikipedia supports free knowledge and Wikidata supports structured facts." --live
-```
+### Hybrid LLM
 
-Omit `--live` to use dry-run graph context.
+Reasoning and reflection can use an LLM when configured: set `configs/reasoning.yaml` (e.g. `require_llm`, cache, node_limit). Extraction uses `TripleExtractor`; reflection can extend prompts via LLM. See `src/reasoning/reflection.py` and `src/ingestion/llm_extract.py`.
 
-## Why this works on your system (and others)
+---
 
-- **Paths:** All scripts use `pathlib.Path` and `ROOT = Path(__file__).resolve().parents[1]`. Paths are built with `ROOT / "scripts" / "file.py"` and passed as `str(...)` only when needed (e.g. subprocess, config). So path separators are correct on Windows (`\`) and Unix (`/`).
-- **Subprocess:** Scripts call `subprocess.run([sys.executable, ...], cwd=str(ROOT))` with a **list** of arguments (no `shell=True`). The same Python and working directory are used on every OS.
-- **Environment:** When spawning subprocesses, scripts set `PYTHONPATH=str(ROOT)` (or `cwd=ROOT`) so imports resolve the same way as in your terminal when you run from repo root.
-- **Docker:** The compose file path is passed as a single argument; Docker Compose accepts both forward and backslash paths. The UI uses a normalized path for the compose file when starting services.
-- **One command per line:** In PowerShell, `&&` is not valid; use `;` or run commands separately. The README uses one command per block so you can copy-paste safely on any shell.
-
-## Phase Milestones
-
-- Phase 1: local NebulaGraph, schema, graph client, extraction pipeline, and 100K-node loader
-- Phase 2: dump acquisition, Spark ETL, and batch extraction/insertion (see below)
-- Phase 3: gravity simulation, mass updates, and clustering hooks
-- Phase 4: reasoning loop, contradiction detection, caching, and hypotheses
-- Phase 5: monitoring, Terraform, Ansible, and deployment scaffolding
-
-## Phase 2: Dump Acquisition, Spark ETL, Batch Ingestion
-
-1. **Dump acquisition** – `scripts/acquire_dumps.py` downloads or generates corpus text:
-   - `--source sample`: write built-in sentences to `data/raw/wikipedia/abstracts.txt`
-   - `--source wikipedia-api`: fetch article summaries via Wikipedia REST API
-   - `--source wikipedia-sample`: download and optionally parse an XML dump
-   Use `--output-dir`, `--max-docs`, and `--parse` as needed.
-   For a **1k–5k doc run**, use e.g. `--source wikipedia-api --max-docs 5000`; then run extraction and `dump_graph_stats --live` to inspect the graph.
-
-2. **Spark ETL** – `scripts/run_spark_etl.py` reads text (one chunk per line) and writes parquet with a `value` column for the extraction pipeline. Default input: `data/raw/wikipedia/abstracts.txt`; default output: `data/processed/corpus.parquet`. Requires Java (`JAVA_HOME` set).
-
-3. **Batch extraction/insertion** – The extraction pipeline accepts either a `.txt` file or parquet (file or directory with a `value` column). Run:
-   - `python -m src.ingestion.extraction_pipeline --input-path <path> [--live]`
-   Or use the combined script: `scripts/run_batch_ingestion.py --acquire [--spark-etl] [--live]` to run acquire, optional Spark ETL, and extraction in one go.
-
-## Thinking Wave Cognition Graph
+## Thinking Wave cognition graph
 
 The graph stores a **cognition layer** alongside concept and topic nodes:
 
-- **Wave** vertices represent one cognitive episode (e.g. one ingestion chunk or reasoning pass). Each has `label`, `source` (`ingestion` | `reasoning`), optional metrics (`intensity`, `coherence`, `tension`), and `source_chunk_id` for provenance.
-- **in_wave** edges link concept nodes to waves: each concept that appears in a chunk is connected to that chunk’s wave, so retrieval can use wave-scoped context.
+- **Wave** vertices = one cognitive episode (ingestion chunk or reasoning pass). Properties: `label`, `source` (`ingestion` | `reasoning`), `intensity`, `coherence`, `tension`, `source_chunk_id`.
+- **in_wave** edges link concept nodes to waves (provenance: “this concept appeared in this episode”).
+- **relates** edges = concept-to-concept (and concept–cluster). Simulation runs on concept/topic nodes and `relates` only.
 
-The extraction pipeline creates one wave per chunk (when using clusters), inserts wave vertices and `in_wave` edges into NebulaGraph, and the reasoning loop can expand context by including concepts from waves whose label matches the query. Simulation runs only on concept/topic nodes and `relates` edges; wave nodes are excluded.
+**Schema:** `src/graph/schema/create_schema.ngql`. Apply with `python scripts/apply_schema.py --live` after creating the space.
 
-**Schema:** `src/graph/schema/create_schema.ngql` defines the `wave` tag and `in_wave` edge. Apply with `python scripts/apply_schema.py --live` after creating the space.
+---
 
-**Loading:** Running the extraction pipeline (e.g. `python -m src.ingestion.extraction_pipeline --input-path data/raw/wikipedia/abstracts.txt --live`) inserts nodes, waves, and both `relates` and `in_wave` edges. Dry-run is supported for tests.
+## Portability
+
+- **Paths:** Scripts use `pathlib.Path` and `ROOT = Path(__file__).resolve().parents[1]`; paths are built as `ROOT / "scripts" / "file.py"` so separators are correct on all OSes.
+- **Subprocess:** Commands use `subprocess.run([sys.executable, ...], cwd=str(ROOT))` with list arguments (no `shell=True`).
+- **PowerShell:** Use `;` instead of `&&` to chain commands; README uses one command per block for copy-paste.
+
+See [PLATFORM.md](PLATFORM.md) for details and how to verify on your system.
+
+---
 
 ## License
 
 This project is open source. See [LICENSE](LICENSE) in the repository root for terms.
-
-## Notes
-
-- The code includes dry-run and fallback logic so the repository can be exercised without a live graph database or GPU.
-- Scale targets from the plan are represented as configuration and workload scripts; full production execution still requires cloud infrastructure and significant runtime resources.
-- The `--live` flags on scripts switch from the default dry-run mode to real NebulaGraph execution.
-- **Portability:** The same repo and commands are intended to work on Windows, macOS, and Linux. See [PLATFORM.md](PLATFORM.md) for how this is done and how to verify on your system.

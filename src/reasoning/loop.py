@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+import hashlib
+import logging
+import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
-import re
 
 import numpy as np
-
-import hashlib
 
 from src.graph.client import NebulaGraphClient
 from src.graph.cognition import EDGE_IN_WAVE, WAVE_SOURCE_REASONING
@@ -15,6 +15,8 @@ from src.ingestion.llm_extract import TripleExtractor
 from src.reasoning.cache import CacheAdapter
 from src.reasoning.tension import TensionResult, compute_tension
 from src.utils import load_yaml_config
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -56,6 +58,9 @@ def generate_hypotheses(tension: TensionResult, limit: int) -> list[Hypothesis]:
         )
     return hypotheses
 
+
+# Learning feedback: reweight edges involved in high-tension (contradiction) pairs
+REWEIGHT_CONFLICT_DELTA = 0.2
 
 # Words that match almost every label and should not be used for graph/keyword filtering
 _LABEL_STOPWORDS = frozenset({
@@ -481,9 +486,34 @@ def run_reasoning_loop(query: str, config_root: Path, live: bool = False) -> Rea
             ]
             if in_wave_edges:
                 persist_client.insert_edges(in_wave_edges)
+            # Post-wave learning: reweight relates edges for high-tension (contradiction) pairs
+            label_to_node_ids: dict[str, list[str]] = {}
+            for node in graph_nodes:
+                label_to_node_ids.setdefault(node.label, []).append(node.node_id)
+            edges_to_reweight: list[Edge] = []
+            for src_label, dst_label, _delta in tension.high_tension_pairs:
+                src_ids = label_to_node_ids.get(src_label, [])
+                dst_ids = label_to_node_ids.get(dst_label, [])
+                for e in graph_edges:
+                    if e.relation != "relates":
+                        continue
+                    if e.src_id in src_ids and e.dst_id in dst_ids:
+                        new_weight = max(0.0, float(e.weight) - REWEIGHT_CONFLICT_DELTA)
+                        edges_to_reweight.append(
+                            Edge(src_id=e.src_id, dst_id=e.dst_id, relation="relates", weight=new_weight, metadata=e.metadata)
+                        )
+                        break
+                    if e.src_id in dst_ids and e.dst_id in src_ids:
+                        new_weight = max(0.0, float(e.weight) - REWEIGHT_CONFLICT_DELTA)
+                        edges_to_reweight.append(
+                            Edge(src_id=e.src_id, dst_id=e.dst_id, relation="relates", weight=new_weight, metadata=e.metadata)
+                        )
+                        break
+            if edges_to_reweight:
+                persist_client.update_edges(edges_to_reweight)
             persist_client.close()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.exception("Failed to persist reasoning wave or reweight edges: %s", e)
 
     return response
 

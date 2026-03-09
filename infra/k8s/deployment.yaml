@@ -1,0 +1,54 @@
+# Stage 3: Kubernetes Deployment for GOAT (Thinking System) app.
+# Use with: kubectl apply -f infra/k8s/deployment.yaml -n <namespace>
+# Requires namespace created (e.g. via Terraform: infra/terraform).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: goat-app
+  labels:
+    app: goat
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: goat
+  template:
+    metadata:
+      labels:
+        app: goat
+    spec:
+      containers:
+        - name: goat
+          image: goat:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: GRAPH_BACKEND
+              value: "nebula"
+            - name: REDIS_ENABLED
+              value: "true"
+          ports:
+            - containerPort: 8000
+              name: http
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: goat-svc
+  labels:
+    app: goat
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
+      name: http
+  selector:
+    app: goat

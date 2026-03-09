@@ -21,6 +21,7 @@ class NodeType(StrEnum):
     SURPRISE = "surprise"
     EQUATION = "equation"
     CLUSTER = "cluster"
+    GOAL = "goal"
 
 
 @dataclass(slots=True)
@@ -94,6 +95,7 @@ class Wave:
     coherence: float = 0.0
     tension: float = 0.0
     source_chunk_id: str = ""
+    created_at: str | None = None  # ISO datetime for long-term self-reflection gap detection
 
     def to_properties(self) -> dict[str, Any]:
         return {

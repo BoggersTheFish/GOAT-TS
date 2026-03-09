@@ -150,20 +150,24 @@ def _compute_coherence_stub(nodes: list[Node]) -> float:
 
 def _compute_tension_stub(nodes: list[Node], edges: list[Edge]) -> float:
     """Stub: sum of squared distance errors for edges (ideal = 1/weight)."""
+    result = _compute_tension_result(nodes, edges)
+    return result.score if result else 0.0
+
+
+def _compute_tension_result(nodes: list[Node], edges: list[Edge]):
+    """Full tension result for Step 7 goal generator / curiosity."""
     try:
-        from src.reasoning.tension import compute_tension
+        from src.reasoning.tension import compute_tension, TensionResult
     except ImportError:
-        return 0.0
-    id_to_idx = {n.node_id: i for i, n in enumerate(nodes)}
+        return None
     positions = {n.node_id: np.array(n.position, dtype=np.float32) for n in nodes}
     expected: dict[tuple[str, str], float] = {}
     for e in edges:
         if e.src_id in positions and e.dst_id in positions and e.weight > 0:
             expected[(e.src_id, e.dst_id)] = 1.0 / float(e.weight)
     if not expected:
-        return 0.0
-    result = compute_tension(positions, expected)
-    return result.score
+        return TensionResult(score=0.0, high_tension_pairs=[])
+    return compute_tension(positions, expected)
 
 
 def _apply_gravity_step(
@@ -244,6 +248,14 @@ def run_demo(
     graph_space: str | None = None,
     config_path: str = "configs/graph.yaml",
     simulation_config_path: str = "configs/simulation.yaml",
+    # Step 7: new capabilities
+    enable_self_reflection: bool = False,
+    self_reflection_interval_ticks: int = 5,
+    enable_sandbox: bool = False,
+    enable_goal_generator: bool = False,
+    enable_curiosity: bool = False,
+    enable_compression: bool = False,
+    compression_archive_path: str | Path | None = None,
 ) -> tuple[list[Node], list[Edge], dict]:
     """
     Run the cognition tick loop. Returns (final nodes, edges, summary dict).
@@ -341,7 +353,72 @@ def run_demo(
             nodes, edges, seed_id_list, min_activation=SPREAD_THRESHOLD, max_hops=SPREAD_MAX_HOPS, decay=SPREAD_DECAY
         )
         coherence = _compute_coherence_stub(active_sub)
-        tension = _compute_tension_stub(nodes, edges)
+        tension_result = _compute_tension_result(nodes, edges)
+        tension = tension_result.score if tension_result else _compute_tension_stub(nodes, edges)
+
+        # Step 7: goal generator (prioritized questions from tension)
+        if enable_goal_generator and tension_result and tension_result.high_tension_pairs:
+            try:
+                from src.reasoning.goal_generator import tensions_to_prioritized_questions
+                id_to_label = {n.node_id: n.label for n in nodes}
+                pqs = tensions_to_prioritized_questions(tension_result, id_to_label=id_to_label, max_questions=5)
+                summary.setdefault("prioritized_questions", []).extend([q.question for q in pqs])
+            except ImportError:
+                pass
+
+        # Step 7: curiosity (entropy-based auto-query)
+        if enable_curiosity and activations:
+            try:
+                from src.reasoning.curiosity import activation_entropy, should_trigger_curiosity_query, curiosity_query
+                entropy = activation_entropy(activations)
+                trigger, reason = should_trigger_curiosity_query(entropy)
+                if trigger and summary.get("prioritized_questions"):
+                    q = summary["prioritized_questions"][0]
+                    curiosity_query(q, Path(config_path).resolve().parent, live=not client.dry_run)
+                elif trigger:
+                    curiosity_query("explore diversity and connections", Path(config_path).resolve().parent, live=not client.dry_run)
+            except ImportError:
+                pass
+
+        # Step 7: long-term self-reflection (wave gaps -> goal nodes)
+        if enable_self_reflection and (tick + 1) % self_reflection_interval_ticks == 0:
+            try:
+                from src.reasoning.self_reflection import run_long_term_self_reflection
+                waves = client.list_waves(limit=200)
+                _, goal_nodes = run_long_term_self_reflection(waves, gap_index_count=5, max_goal_nodes=3)
+                if goal_nodes:
+                    client.insert_nodes(goal_nodes)
+                    nodes = list(nodes) + goal_nodes
+            except ImportError:
+                pass
+
+        # Step 7: internal simulation sandbox (hypothetical propagation)
+        if enable_sandbox and tick == ticks // 2 and seed_id_list:
+            try:
+                from src.reasoning.simulation_sandbox import run_sandbox_hypothetical
+                hyp_activations = {sid: 0.9 for sid in seed_id_list[:3]}
+                _, _, sandbox_acts = run_sandbox_hypothetical(
+                    nodes, edges, activation_overrides=hyp_activations, seed_ids=seed_id_list[:3],
+                    run_propagation=True, max_hops=3,
+                )
+                if sandbox_acts and verbose:
+                    logger.info("Sandbox hypothetical: top activations %s", list(sandbox_acts.items())[:5])
+            except ImportError:
+                pass
+
+        # Step 7: knowledge compression (PyG -> FAISS archive)
+        if enable_compression and (tick == ticks - 1 or (ticks > 5 and tick % 5 == 0)):
+            try:
+                from src.graph.compression import archive_subgraph_to_faiss
+                sub_nodes = active_sub if len(active_sub) >= 3 else nodes[:50]
+                sub_edges = [e for e in edges if e.src_id in {n.node_id for n in sub_nodes} and e.dst_id in {n.node_id for n in sub_nodes}]
+                if len(sub_nodes) >= 2:
+                    path = Path(compression_archive_path) if compression_archive_path else None
+                    sid, idx = archive_subgraph_to_faiss(sub_nodes, sub_edges, index_path=path, dimension=64)
+                    if sid and path:
+                        idx.save(path)
+            except ImportError:
+                pass
 
         if verbose:
             top = _top_activated(activations, n=5)
@@ -439,6 +516,14 @@ def main() -> int:
         default="configs/graph.yaml",
         help="Graph config path.",
     )
+    # Step 7: new capabilities
+    parser.add_argument("--enable-self-reflection", action="store_true", help="Run long-term self-reflection (wave gaps -> goal nodes).")
+    parser.add_argument("--self-reflection-interval", type=int, default=5, metavar="N", help="Self-reflection every N ticks.")
+    parser.add_argument("--enable-sandbox", action="store_true", help="Run internal simulation sandbox (hypothetical propagation).")
+    parser.add_argument("--enable-goal-generator", action="store_true", help="Generate prioritized questions from tension.")
+    parser.add_argument("--enable-curiosity", action="store_true", help="Curiosity-driven exploration (entropy, auto-query).")
+    parser.add_argument("--enable-compression", action="store_true", help="Compress subgraph to FAISS archive (PyG GNN).")
+    parser.add_argument("--compression-archive", type=str, default=None, metavar="PATH", help="Directory to save FAISS compression index.")
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -475,6 +560,13 @@ def main() -> int:
             verbose=args.verbose,
             graph_space=args.graph_space,
             config_path=args.config,
+            enable_self_reflection=args.enable_self_reflection,
+            self_reflection_interval_ticks=args.self_reflection_interval,
+            enable_sandbox=args.enable_sandbox,
+            enable_goal_generator=args.enable_goal_generator,
+            enable_curiosity=args.enable_curiosity,
+            enable_compression=args.enable_compression,
+            compression_archive_path=args.compression_archive,
         )
     except Exception as e:
         logger.exception("Demo failed")

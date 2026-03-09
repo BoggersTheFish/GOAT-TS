@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import logging
+import multiprocessing
 import uuid
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
 
 from tqdm import tqdm
 
@@ -17,6 +19,8 @@ CLUSTER_LABEL_PREFIX = "topic: "
 
 # UUIDv5 namespace for GOAT node IDs (collision avoidance per spec).
 GOAT_NAMESPACE = uuid.UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
+
+logger = logging.getLogger(__name__)
 
 
 def stable_node_id(seed: str) -> str:
@@ -202,12 +206,16 @@ def extract_from_texts(
     use_clusters: bool = True,
     max_nodes_per_label: int = 10,
     llm_config_path: Path | None = None,
+    require_llm: bool = False,
+    min_confidence: float = 0.5,
+    workers: int | None = None,
 ) -> tuple[list[Node], list[Edge], list[Wave], list[Edge]]:
     """Returns (concept/cluster nodes, relates edges, waves, in_wave edges).
 
     Extractor: TripleExtractor from configs/llm.yaml. If enable_model_inference is true,
     uses Hugging Face text2text-generation (e.g. google/flan-t5-base); otherwise
-    regex fallback (subject is/has/uses object). Set --config or config_root for custom path.
+    regex fallback (subject is/has/uses object) unless require_llm=True.
+    Triples with confidence <= min_confidence are dropped.
     """
     config_path = llm_config_path or (config_root / "configs" / "llm.yaml")
     extractor = TripleExtractor(config_path)
@@ -218,25 +226,37 @@ def extract_from_texts(
     waves: list[Wave] = []
     in_wave_edges: list[Edge] = []
 
-    for idx, chunk in enumerate(tqdm(text_list, unit="chunks", desc="Extracting triples")):
-        result = extractor.extract(chunk)
-        if not result.triples:
+    chunk_results: Iterable[tuple[int, str, list[Triple]]]
+    if workers is not None and workers > 1:
+        chunk_results = _extract_chunks_parallel(
+            text_list, config_path, require_llm, min_confidence, workers
+        )
+    else:
+        chunk_results = (
+            (idx, chunk, [t for t in extractor.extract(chunk, require_llm=require_llm).triples if (getattr(t, "confidence", 1.0) or 0) > min_confidence])
+            for idx, chunk in enumerate(text_list)
+        )
+    for idx, chunk, triples in tqdm(chunk_results, total=len(text_list), unit="chunks", desc="Extracting triples"):
+        if not triples:
             continue
-        topic_id = f"doc_{idx}"
-        topic_label = chunk[:80].replace("\n", " ").strip() or topic_id
-        if use_clusters:
-            cluster_node, nodes, edges, wave, chunk_in_wave = _triples_to_graph_for_chunk(
-                result.triples, topic_id, topic_label
-            )
-            cluster_nodes.append(cluster_node)
-            concept_nodes.extend(nodes)
-            all_edges.extend(edges)
-            waves.append(wave)
-            in_wave_edges.extend(chunk_in_wave)
-        else:
-            cn, ce = triples_to_graph(result.triples)
-            concept_nodes.extend(cn)
-            all_edges.extend(ce)
+        try:
+            topic_id = f"doc_{idx}"
+            topic_label = chunk[:80].replace("\n", " ").strip() or topic_id
+            if use_clusters:
+                cluster_node, nodes, edges, wave, chunk_in_wave = _triples_to_graph_for_chunk(
+                    triples, topic_id, topic_label
+                )
+                cluster_nodes.append(cluster_node)
+                concept_nodes.extend(nodes)
+                all_edges.extend(edges)
+                waves.append(wave)
+                in_wave_edges.extend(chunk_in_wave)
+            else:
+                cn, ce = triples_to_graph(triples)
+                concept_nodes.extend(cn)
+                all_edges.extend(ce)
+        except Exception as e:
+            logger.exception("Graph build failed for chunk %s: %s", idx, e)
 
     if use_clusters and concept_nodes:
         concept_nodes, all_edges = _prune_excess_nodes(
@@ -261,30 +281,47 @@ def load_into_graph(
     llm_config_path: Path | None = None,
     global_merge: bool = False,
     merge_threshold: float = 0.8,
+    require_llm: bool = False,
+    min_confidence: float = 0.5,
+    workers: int | None = None,
 ) -> dict[str, int]:
-    nodes, edges, waves, in_wave_edges = extract_from_texts(
-        texts, config_root,
-        use_clusters=use_clusters,
-        max_nodes_per_label=max_nodes_per_label,
-        llm_config_path=llm_config_path,
-    )
-    if global_merge and nodes:
-        from src.graph.cluster_merge import global_concept_merge
-        config_path = config_root / "configs" / "graph.yaml"
-        all_edges = edges + in_wave_edges
-        nodes, all_edges = global_concept_merge(
-            nodes, all_edges,
-            similarity_threshold=merge_threshold,
-            config_path=config_path if config_path.exists() else None,
+    try:
+        nodes, edges, waves, in_wave_edges = extract_from_texts(
+            texts, config_root,
+            use_clusters=use_clusters,
+            max_nodes_per_label=max_nodes_per_label,
+            llm_config_path=llm_config_path,
+            require_llm=require_llm,
+            min_confidence=min_confidence,
+            workers=workers,
         )
-        # Split back: in_wave has dst_id in wave_ids
-        wave_ids = {w.wave_id for w in waves}
-        edges = [e for e in all_edges if e.dst_id not in wave_ids]
-        in_wave_edges = [e for e in all_edges if e.dst_id in wave_ids]
-    client = NebulaGraphClient(
-        config_root / "configs" / "graph.yaml",
-        dry_run_override=False if live else None,
-    )
+    except Exception as e:
+        logger.exception("extract_from_texts failed: %s", e)
+        raise
+    if global_merge and nodes:
+        try:
+            from src.graph.cluster_merge import global_concept_merge
+            config_path = config_root / "configs" / "graph.yaml"
+            all_edges = edges + in_wave_edges
+            nodes, all_edges = global_concept_merge(
+                nodes, all_edges,
+                similarity_threshold=merge_threshold,
+                config_path=config_path if config_path.exists() else None,
+            )
+            wave_ids = {w.wave_id for w in waves}
+            edges = [e for e in all_edges if e.dst_id not in wave_ids]
+            in_wave_edges = [e for e in all_edges if e.dst_id in wave_ids]
+        except Exception as e:
+            logger.exception("global_concept_merge failed: %s", e)
+            raise
+    try:
+        client = NebulaGraphClient(
+            config_root / "configs" / "graph.yaml",
+            dry_run_override=False if live else None,
+        )
+    except Exception as e:
+        logger.exception("NebulaGraphClient init failed: %s", e)
+        raise
     progress_interval = max(1, min(2000, len(nodes) // 20)) if nodes else 1000
     with tqdm(total=len(nodes), unit="nodes", desc="Inserting nodes") as pbar:
         def node_progress(current: int, total: int) -> None:
@@ -307,6 +344,34 @@ def load_into_graph(
         client.insert_edges(all_edges, on_progress=edge_progress, progress_interval=progress_interval)
     client.close()
     return {"nodes": len(nodes), "edges": len(edges), "waves": len(waves), "in_wave_edges": len(in_wave_edges)}
+
+
+def _extract_one(args: tuple[int, str, str, bool, float]) -> tuple[int, str, list[Triple]]:
+    """Top-level for multiprocessing: (idx, chunk, config_path, require_llm, min_confidence) -> (idx, chunk, triples)."""
+    idx, chunk, config_path, require_llm, min_confidence = args
+    try:
+        extractor = TripleExtractor(config_path)
+        result = extractor.extract(chunk, require_llm=require_llm)
+        triples = [t for t in result.triples if (getattr(t, "confidence", 1.0) or 0) > min_confidence]
+        return (idx, chunk, triples)
+    except Exception as e:
+        logger.exception("Worker extraction failed for chunk %s: %s", idx, e)
+        return (idx, chunk, [])
+
+
+def _extract_chunks_parallel(
+    text_list: list[str],
+    config_path: Path,
+    require_llm: bool,
+    min_confidence: float,
+    workers: int,
+) -> list[tuple[int, str, list[Triple]]]:
+    """Run extraction in a process pool; returns list of (idx, chunk, triples) sorted by idx."""
+    cfg_str = str(config_path)
+    args_list = [(i, c, cfg_str, require_llm, min_confidence) for i, c in enumerate(text_list)]
+    with multiprocessing.Pool(processes=workers) as pool:
+        results = pool.map(_extract_one, args_list)
+    return sorted(results, key=lambda x: x[0])
 
 
 def _read_texts_from_path(input_path: Path) -> list[str]:
@@ -371,6 +436,24 @@ def main() -> None:
         default=0.8,
         help="Cosine similarity threshold for global merge (default 0.8).",
     )
+    parser.add_argument(
+        "--require-llm",
+        action="store_true",
+        help="Require LLM extraction; no regex fallback (chunks with no model output yield no triples).",
+    )
+    parser.add_argument(
+        "--min-confidence",
+        type=float,
+        default=0.5,
+        help="Drop triples with confidence <= this (default 0.5).",
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Number of parallel extraction processes (default 1). Use >1 for multi-core extraction.",
+    )
     args = parser.parse_args()
 
     root = Path(__file__).resolve().parents[2]
@@ -381,16 +464,23 @@ def main() -> None:
     texts = _read_texts_from_path(input_path)
     if not texts:
         raise SystemExit("No text chunks found.")
-    stats = load_into_graph(
-        texts, root,
-        live=args.live,
-        use_clusters=not args.no_clusters,
-        max_nodes_per_label=args.max_nodes_per_label,
-        llm_config_path=llm_config,
-        global_merge=args.global_merge,
-        merge_threshold=args.merge_threshold,
-    )
-    print(stats)
+    try:
+        stats = load_into_graph(
+            texts, root,
+            live=args.live,
+            use_clusters=not args.no_clusters,
+            max_nodes_per_label=args.max_nodes_per_label,
+            llm_config_path=llm_config,
+            global_merge=args.global_merge,
+            merge_threshold=args.merge_threshold,
+            require_llm=args.require_llm,
+            min_confidence=args.min_confidence,
+            workers=args.workers,
+        )
+        print(stats)
+    except Exception as e:
+        logger.exception("load_into_graph failed: %s", e)
+        raise SystemExit(1) from e
 
 
 if __name__ == "__main__":

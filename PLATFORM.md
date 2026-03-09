@@ -1,6 +1,8 @@
 # Platform and portability
 
-GOAT-TS is written so the same code and workflow work on **Windows**, **macOS**, and **Linux**. This file explains what the repo relies on and how to verify or fix issues on a new system.
+GOAT-TS is written so the same code and workflow work on **Windows**, **macOS**, and **Linux**. This document explains what the repo relies on and how to verify or fix issues on a new system. For project overview and setup see [README.md](README.md).
+
+---
 
 ## What the code assumes (and why it works elsewhere)
 

@@ -55,6 +55,24 @@ def build_subgraph(client: NebulaGraphClient, concept: str, hops: int, node_limi
     return {"nodes": nodes, "edges": edges}
 
 
+def export_subgraph_to_dot(data: dict, dot_path: Path) -> None:
+    """Write subgraph to a Graphviz .dot file for interpretability. data = {nodes, edges}."""
+    lines = ["digraph G {", "  rankdir=LR;", "  node [shape=circle];"]
+    for n in data.get("nodes", []):
+        nid = n.get("node_id", "")
+        label = (n.get("label") or nid).replace('"', '\\"')[:40]
+        lines.append(f'  "{nid}" [label="{label}"];')
+    for e in data.get("edges", []):
+        src = e.get("src_id", "")
+        dst = e.get("dst_id", "")
+        w = e.get("weight", 1.0)
+        lines.append(f'  "{src}" -> "{dst}" [weight={w:.2f}];')
+    lines.append("}")
+    dot_path = Path(dot_path)
+    dot_path.parent.mkdir(parents=True, exist_ok=True)
+    dot_path.write_text("\n".join(lines), encoding="utf-8")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Export subgraph around a concept to JSON and/or PNG.")
     parser.add_argument("--concept", required=True, help="Concept label (or substring) to center the subgraph.")
@@ -62,6 +80,7 @@ def main() -> None:
     parser.add_argument("--live", action="store_true", help="Query live NebulaGraph.")
     parser.add_argument("--output", help="Write JSON to this path.")
     parser.add_argument("--plot", help="Write PNG to this path (requires matplotlib).")
+    parser.add_argument("--dot", help="Write Graphviz .dot to this path (interpretability).")
     parser.add_argument("--node-limit", type=int, default=500, help="Max nodes (default 500).")
     parser.add_argument("--edge-limit", type=int, default=2000, help="Max edges (default 2000).")
     args = parser.parse_args()
@@ -86,6 +105,10 @@ def main() -> None:
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
         print(f"Wrote {len(data['nodes'])} nodes, {len(data['edges'])} edges to {out_path}")
+
+    if args.dot:
+        export_subgraph_to_dot(data, Path(args.dot))
+        print(f"Wrote Graphviz .dot to {args.dot}")
 
     if args.plot:
         try:

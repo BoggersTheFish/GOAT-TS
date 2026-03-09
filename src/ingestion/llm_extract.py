@@ -99,10 +99,12 @@ class TripleExtractor:
             triples.append(Triple(subject=parts[0], relation=parts[1], object=parts[2]))
         return triples
 
-    def extract(self, text: str) -> ExtractionResult:
+    def extract(self, text: str, *, require_llm: bool = False) -> ExtractionResult:
         model_result = self._extract_with_model(text)
         if model_result is not None:
             return model_result
+        if require_llm:
+            return ExtractionResult(triples=[], raw_response="llm-required-but-unavailable")
         return self._extract_with_regex(text)
 
     def extract_batch(self, chunks: Iterable[str]) -> list[ExtractionResult]:

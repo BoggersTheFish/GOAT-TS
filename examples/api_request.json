@@ -1,0 +1,18 @@
+{
+  "run_demo": {
+    "description": "POST /run_demo body example",
+    "body": {
+      "ticks": 5,
+      "dry_run": true,
+      "seed_labels": "concept",
+      "enable_forces": false
+    }
+  },
+  "reasoning": {
+    "description": "POST /reasoning body example",
+    "body": {
+      "query": "Wikipedia supports free knowledge and Wikidata supports structured facts.",
+      "live": false
+    }
+  }
+}

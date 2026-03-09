@@ -1,4 +1,7 @@
+# Stage 3: Set use_gpu: true when CUDA/FAISS-GPU available; requires faiss-gpu and PyTorch CUDA.
+# Env override: GOAT_USE_GPU=1
 simulation:
+  use_gpu: false
   gravitational_constant: 0.1
   damping: 0.02
   repulsion: 0.05

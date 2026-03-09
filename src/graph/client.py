@@ -1,13 +1,17 @@
 from __future__ import annotations
 
-import os
-from dataclasses import asdict
 import json
+import logging
+import os
+import sqlite3
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
-from src.graph.models import Edge, MemoryState, Node, Wave
+from src.graph.models import Edge, MemoryState, Node, NodeType, Wave
 from src.utils import load_yaml_config
+
+logger = logging.getLogger(__name__)
 
 
 def _apply_graph_env_overrides(config: dict[str, Any], config_path: Path) -> None:
@@ -32,24 +36,111 @@ def _apply_graph_env_overrides(config: dict[str, Any], config_path: Path) -> Non
         config["password"] = os.getenv("NEBULA_PASSWORD")
 
 
-class InMemoryGraphStore:
-    """Fallback graph store used for tests and dry-run workflows."""
+def _node_to_sqlite_dict(n: Node) -> dict[str, Any]:
+    d = asdict(n)
+    d["state"] = n.state.value
+    d["node_type"] = n.node_type.value
+    return d
 
-    def __init__(self) -> None:
+
+def _node_from_sqlite_dict(d: dict[str, Any]) -> Node:
+    d = dict(d)
+    d["state"] = MemoryState(str(d.get("state", "dormant")))
+    d["node_type"] = NodeType(str(d.get("node_type", "knowledge")))
+    return Node(**d)
+
+
+class InMemoryGraphStore:
+    """Fallback graph store used for tests and dry-run workflows. Optional SQLite persistence."""
+
+    def __init__(self, sqlite_path: str | Path | None = None) -> None:
         self.nodes: dict[str, Node] = {}
         self.edges: list[Edge] = []
         self.waves: dict[str, Wave] = {}
+        self._sqlite_path: Path | None = Path(sqlite_path) if sqlite_path else None
+        if self._sqlite_path:
+            self._load_sqlite()
+
+    def _load_sqlite(self) -> None:
+        if not self._sqlite_path or not self._sqlite_path.exists():
+            return
+        try:
+            conn = sqlite3.connect(self._sqlite_path)
+            cur = conn.cursor()
+            cur.execute("SELECT node_id, data FROM nodes")
+            for row in cur.fetchall():
+                nid, data = row[0], json.loads(row[1])
+                self.nodes[nid] = _node_from_sqlite_dict(data)
+            cur.execute("SELECT src_id, dst_id, relation, weight, metadata FROM edges")
+            for row in cur.fetchall():
+                meta = json.loads(row[4]) if row[4] else {}
+                self.edges.append(Edge(src_id=row[0], dst_id=row[1], relation=row[2], weight=float(row[3]), metadata=meta))
+            cur.execute("SELECT wave_id, data FROM waves")
+            for row in cur.fetchall():
+                wid, data = row[0], json.loads(row[1])
+                self.waves[wid] = Wave(**data)
+            conn.close()
+        except Exception as e:
+            logger.warning("Failed to load in-memory store from SQLite %s: %s", self._sqlite_path, e)
+
+    def _save_sqlite(self) -> None:
+        if not self._sqlite_path:
+            return
+        try:
+            self._sqlite_path.parent.mkdir(parents=True, exist_ok=True)
+            conn = sqlite3.connect(self._sqlite_path)
+            cur = conn.cursor()
+            cur.execute(
+                "CREATE TABLE IF NOT EXISTS nodes (node_id TEXT PRIMARY KEY, data TEXT)"
+            )
+            cur.execute(
+                "CREATE TABLE IF NOT EXISTS edges (src_id TEXT, dst_id TEXT, relation TEXT, weight REAL, metadata TEXT)"
+            )
+            cur.execute(
+                "CREATE TABLE IF NOT EXISTS waves (wave_id TEXT PRIMARY KEY, data TEXT)"
+            )
+            cur.execute("DELETE FROM nodes")
+            cur.execute("DELETE FROM edges")
+            cur.execute("DELETE FROM waves")
+            for nid, node in self.nodes.items():
+                cur.execute("INSERT INTO nodes (node_id, data) VALUES (?, ?)", (nid, json.dumps(_node_to_sqlite_dict(node))))
+            for e in self.edges:
+                cur.execute(
+                    "INSERT INTO edges (src_id, dst_id, relation, weight, metadata) VALUES (?, ?, ?, ?, ?)",
+                    (e.src_id, e.dst_id, e.relation, float(e.weight), json.dumps(e.metadata)),
+                )
+            for wid, wave in self.waves.items():
+                cur.execute("INSERT INTO waves (wave_id, data) VALUES (?, ?)", (wid, json.dumps(asdict(wave))))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.warning("Failed to save in-memory store to SQLite %s: %s", self._sqlite_path, e)
 
     def insert_nodes(self, nodes: Iterable[Node]) -> None:
         for node in nodes:
             self.nodes[node.node_id] = node
+        self._save_sqlite()
 
     def insert_edges(self, edges: Iterable[Edge]) -> None:
         self.edges.extend(edges)
+        self._save_sqlite()
+
+    def update_edges(self, edges: Iterable[Edge]) -> None:
+        """Update weight of relates edges in place (by src_id, dst_id)."""
+        updates = {(e.src_id, e.dst_id): e for e in edges if e.relation == "relates"}
+        new_edges: list[Edge] = []
+        for e in self.edges:
+            if e.relation == "relates" and (e.src_id, e.dst_id) in updates:
+                new_edges.append(updates[(e.src_id, e.dst_id)])
+            else:
+                new_edges.append(e)
+        self.edges = new_edges
+        self._save_sqlite()
 
     def insert_waves(self, waves: Iterable[Wave]) -> None:
         for w in waves:
             self.waves[w.wave_id] = w
+        self._save_sqlite()
 
     def get_node(self, node_id: str) -> Node | None:
         return self.nodes.get(node_id)
@@ -84,7 +175,8 @@ class NebulaGraphClient:
         _apply_graph_env_overrides(self.config, path.parents[1] if "configs" in path.parts else path.parent)
         if dry_run_override is not None:
             self.config["dry_run"] = dry_run_override
-        self._store = InMemoryGraphStore()
+        sqlite_path = self.config.get("sqlite_path")
+        self._store = InMemoryGraphStore(sqlite_path=sqlite_path)
         self._pool = None
         self._session = None
 
@@ -294,6 +386,34 @@ class NebulaGraphClient:
             if on_progress and (n % progress_interval == 0 or n == total):
                 on_progress(n, total)
 
+    def update_edges(
+        self,
+        edges: Iterable[Edge],
+        *,
+        on_progress: Callable[[int, int], None] | None = None,
+        progress_interval: int = 500,
+    ) -> None:
+        """Update edge weights (e.g. after learning feedback). Only relates edges are updated."""
+        materialized = [e for e in edges if e.relation == "relates"]
+        if self.dry_run:
+            self._store.update_edges(materialized)
+            if on_progress:
+                on_progress(len(materialized), len(materialized))
+            return
+
+        total = len(materialized)
+        for i, edge in enumerate(materialized):
+            src_esc = self._escape_nGQL_string(edge.src_id)
+            dst_esc = self._escape_nGQL_string(edge.dst_id)
+            statement = (
+                f'UPDATE EDGE ON relates "{src_esc}" -> "{dst_esc}" '
+                f'SET weight = {float(edge.weight)};'
+            )
+            self._execute(statement)
+            n = i + 1
+            if on_progress and (n % progress_interval == 0 or n == total):
+                on_progress(n, total)
+
     def update_nodes(
         self,
         nodes: Iterable[Node],
@@ -331,6 +451,24 @@ class NebulaGraphClient:
             n = i + 1
             if on_progress and (n % progress_interval == 0 or n == total):
                 on_progress(n, total)
+
+    def backup_snapshot(self, path: str | Path, *, node_limit: int = 10000, edge_limit: int = 50000) -> None:
+        """Write a graph backup (nodes, relates edges, waves) to a JSON file for versioning/restore."""
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if self.dry_run:
+            snapshot = self._store.snapshot()
+            waves = [asdict(w) for w in self._store.waves.values()]
+        else:
+            nodes = self.list_nodes(limit=node_limit)
+            edges = self.list_edges(limit=edge_limit)
+            waves_list = self.list_waves(limit=2000)
+            snapshot = {"nodes": [asdict(n) for n in nodes], "edges": [asdict(e) for e in edges]}
+            waves = [asdict(w) for w in waves_list]
+        payload = {"nodes": snapshot["nodes"], "edges": snapshot["edges"], "waves": waves}
+        path.write_text(json.dumps(payload, indent=0, default=str), encoding="utf-8")
+        logger.info("Backup snapshot written to %s (%s nodes, %s edges, %s waves).",
+                    path, len(snapshot["nodes"]), len(snapshot["edges"]), len(waves))
 
     def get_node(self, node_id: str) -> Node | None:
         if self.dry_run:

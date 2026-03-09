@@ -7,6 +7,7 @@ langchain-huggingface>=0.1.2
 transformers>=4.38.0
 torch>=2.2.0
 numpy>=1.24.0
+scipy>=1.11.0
 pytest>=8.0.0
 # Config and HTTP
 pyyaml>=6.0.2
@@ -19,9 +20,24 @@ networkx>=3.4.0
 matplotlib>=3.7.0
 # Vector index (external backend; embeddings in node metadata)
 faiss-cpu>=1.7.4
+# Graph attention (Step 3: importance weighting / edge evolution)
+torch-geometric>=2.4.0
+# Step 4: conceptual clustering (Leiden), self-organizing layout
+leidenalg>=0.10.0
+igraph>=0.11.0
+minisom>=2.3.0
 # Optional for full stack (Spark, Redis, monitoring)
+apscheduler>=3.10.0
 pyarrow>=14.0.0
 pyspark>=3.5.0
 redis>=5.0.0
 prometheus-client>=0.21.0
 sentence-transformers>=3.0.0
+# Step 5: TF-IDF (query_handler), clustering (abstraction), IsolationForest (noise_filter)
+scikit-learn>=1.3.0
+# Step 6: reasoning benchmarks (PuLP)
+pulp>=2.7.0
+# Step 8 Stage 4: Streamlit viz; Stage 5: API
+streamlit>=1.28.0
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0

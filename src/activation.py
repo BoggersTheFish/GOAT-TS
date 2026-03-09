@@ -67,9 +67,10 @@ def propagate_spreading_activation(
     use_torch: bool = True,
 ) -> PropagationResult:
     """
-    ACT-R style spreading activation: act_{t+1} = sum(incoming * weight) * (1 - decay) + bias.
-    Seeds get initial_activation (1.0). Propagation stops after max_hops or when converged.
-    Activations below threshold are set to 0 (and not propagated further in effect).
+    ACT-R style spreading activation with fan-out limit and damped iteration:
+      act_{t+1} = sum(incoming * weight) * (1 - decay) + bias
+    (Spec: decay=0.1 -> act_t+1 = sum(in)*(1-0.1)+bias.) Seeds get initial_activation (1.0).
+    Propagation stops after max_hops or when converged. Activations below threshold set to 0.
     """
     if not node_ids:
         return PropagationResult(activations={}, iterations=0, converged=True)

@@ -1,8 +1,8 @@
-# GOAT Codebase Reference
+# GOAT-TS Codebase Reference
 
-**Author:** Ben Michalek (BoggersTheFish)
+**Author:** Ben Michalek ([BoggersTheFish](https://github.com/BoggersTheFish))
 
-This document explains what each part of the GOAT (Thinking System) codebase does and where to find it. Use it to navigate the repo and understand how components fit together.
+This document explains what each part of the GOAT-TS (Thinking System) codebase does and where to find it. Use it to navigate the repo and understand how components fit together. For setup and quick start see [README.md](README.md).
 
 ---
 
@@ -22,22 +22,26 @@ GOAT is a **local-first scaffold** for a knowledge-graph–driven “Thinking Sy
 
 ```text
 GOAT/
-├── configs/           # YAML config for graph, LLM, reasoning, simulation
-├── docker/            # Docker Compose for NebulaGraph, Redis, Spark
-├── infra/             # Terraform and Ansible (deployment scaffolding)
-├── scripts/           # Entry-point scripts (schema, load data, demos, ingestion pipeline)
+├── configs/           # YAML: graph, reasoning, simulation
+├── docker/            # Docker Compose (NebulaGraph, Redis, Spark)
+├── examples/          # Sample input, export shape, API request examples
+├── infra/             # Terraform, Ansible, K8s (deployment scaffolding)
+├── scripts/           # Schema, ingestion, demos, export, API, Streamlit, goat_ui
 ├── src/               # Core Python packages
-│   ├── graph/         # Graph models, Nebula client, schema, cognition ontology
-│   ├── ingestion/     # Triple extraction, extraction pipeline, Spark reader
-│   ├── reasoning/     # Reasoning loop, tension, cache (Redis)
-│   ├── simulation/    # Gravity simulation and graph-backed run
-│   ├── physics/       # Forces and simulation helpers
-│   ├── monitoring/    # Metrics (Prometheus) and dashboards
-│   └── utils.py       # Config loading and shared helpers
-├── tests/             # Pytest suite (milestones, graph, LLM, reasoning, physics)
+│   ├── agi_loop/      # Cognition demo loop (demo_loop.py)
+│   ├── graph/         # Models, Nebula client, schema, cognition, vector index, compression
+│   ├── ingestion/     # Extraction pipeline, LLM extract, online ingest
+│   ├── reasoning/     # Loop, tension, reflection, goal generator, curiosity, sandbox, cache
+│   ├── simulation/    # Gravity, loop
+│   ├── physics/       # Forces, layout
+│   ├── monitoring/    # Metrics (Prometheus)
+│   └── utils.py       # Config loading and helpers
+├── tests/             # Pytest: milestones, benchmarks, API, graph, reasoning, physics
 ├── requirements.txt
-├── pytest.ini         # Pytest options (e.g. ignore legacy test module)
-├── README.md          # Quick start and phase milestones
+├── pytest.ini
+├── README.md
+├── README_ARCHITECTURE.md
+├── ROADMAP.md
 └── CODEBASE.md        # This file
 ```
 
