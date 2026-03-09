@@ -1,0 +1,16 @@
+langchain>=0.3.19
+langchain-huggingface>=0.1.2
+networkx>=3.4.2
+numpy>=2.2.3
+prometheus-client>=0.21.1
+pydantic>=2.10.6
+pyyaml>=6.0.2
+sentence-transformers>=3.4.1
+torch>=2.6.0
+transformers>=4.49.0
+pytest>=8.3.4
+nebula3-python>=3.8.2
+pyarrow>=18.0.0
+pyspark>=3.5.5
+redis>=5.2.1
+requests>=2.32.3

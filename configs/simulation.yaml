@@ -1,0 +1,14 @@
+simulation:
+  gravitational_constant: 0.1
+  damping: 0.02
+  repulsion: 0.05
+  spring_constant: 0.25
+  ideal_length_base: 1.0
+  velocity_damping: 0.96
+  position_bound: 10.0
+  phi: 0.98
+  kappa: 0.25
+  lambda: 0.15
+  max_mass: 1000.0
+  split_threshold: 500.0
+  epsilon: 1.0e-6

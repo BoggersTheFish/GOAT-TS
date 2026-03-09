@@ -1,0 +1,17 @@
+- name: Configure TS cluster
+  hosts: ts_cluster
+  become: true
+  tasks:
+    - name: Ensure Docker is installed
+      ansible.builtin.package:
+        name: docker
+        state: present
+
+    - name: Ensure Python is installed
+      ansible.builtin.package:
+        name: python3
+        state: present
+
+    - name: Show next deployment step
+      ansible.builtin.debug:
+        msg: "Deploy NebulaGraph, Spark, Redis, and TS services with Helm or Compose."

@@ -1,0 +1,7 @@
+CREATE SPACE IF NOT EXISTS ts_graph(
+  partition_num = 10,
+  replica_factor = 1,
+  vid_type = FIXED_STRING(64)
+);
+
+USE ts_graph;

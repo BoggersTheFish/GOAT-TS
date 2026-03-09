@@ -1,0 +1,10 @@
+llm:
+  provider: huggingface
+  model_name: google/flan-t5-base
+  embedding_model: sentence-transformers/all-MiniLM-L6-v2
+  max_tokens: 512
+  batch_size: 8
+  device: cpu
+  enable_model_inference: false
+  use_langchain: true
+  fallback_extractor: regex

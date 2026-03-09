@@ -1,0 +1,32 @@
+USE ts_graph;
+
+CREATE TAG IF NOT EXISTS node(
+  label string,
+  mass double,
+  activation double,
+  state string,
+  cluster_id string,
+  metadata string
+);
+
+CREATE EDGE IF NOT EXISTS relates(
+  weight double
+);
+
+CREATE TAG IF NOT EXISTS wave(
+  label string,
+  source string,
+  intensity double,
+  coherence double,
+  tension double,
+  source_chunk_id string
+);
+
+CREATE EDGE IF NOT EXISTS in_wave(
+  weight double
+);
+
+CREATE TAG INDEX IF NOT EXISTS node_label_index ON node(label(128));
+CREATE TAG INDEX IF NOT EXISTS node_state_index ON node(state(32));
+CREATE TAG INDEX IF NOT EXISTS wave_source_index ON wave(source(32));
+CREATE TAG INDEX IF NOT EXISTS wave_source_chunk_index ON wave(source_chunk_id(128));

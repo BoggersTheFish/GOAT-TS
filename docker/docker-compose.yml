@@ -1,0 +1,80 @@
+services:
+  metad0:
+    image: vesoft/nebula-metad:v3.8.0
+    container_name: ts-nebula-metad0
+    command:
+      - --meta_server_addrs=metad0:9559
+      - --local_ip=metad0
+      - --ws_ip=metad0
+      - --port=9559
+      - --heartbeat_interval_secs=2
+    ports:
+      - "9559:9559"
+    networks:
+      - tsnet
+
+  storaged0:
+    image: vesoft/nebula-storaged:v3.8.0
+    container_name: ts-nebula-storaged0
+    command:
+      - --meta_server_addrs=metad0:9559
+      - --local_ip=storaged0
+      - --ws_ip=storaged0
+      - --port=9779
+      - --heartbeat_interval_secs=2
+    depends_on:
+      - metad0
+    ports:
+      - "9779:9779"
+    networks:
+      - tsnet
+
+  graphd0:
+    image: vesoft/nebula-graphd:v3.8.0
+    container_name: ts-nebula-graphd0
+    command:
+      - --meta_server_addrs=metad0:9559
+      - --port=9669
+      - --local_ip=graphd0
+      - --ws_ip=graphd0
+      - --heartbeat_interval_secs=2
+    depends_on:
+      - storaged0
+    ports:
+      - "9669:9669"
+    networks:
+      - tsnet
+
+  redis:
+    image: redis:7.4
+    container_name: ts-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - tsnet
+
+  spark:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.spark
+    container_name: ts-spark
+    environment:
+      SPARK_NO_DAEMONIZE: "true"
+    command:
+      - /opt/spark/bin/spark-class
+      - org.apache.spark.deploy.master.Master
+      - --host
+      - 0.0.0.0
+      - --port
+      - "7077"
+      - --webui-port
+      - "8080"
+    ports:
+      - "7077:7077"
+      - "8080:8080"
+    networks:
+      - tsnet
+
+networks:
+  tsnet:
+    driver: bridge

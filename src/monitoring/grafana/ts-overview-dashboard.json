@@ -1,0 +1,41 @@
+{
+  "title": "TS Overview",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Query Latency",
+      "targets": [
+        {
+          "expr": "rate(ts_query_latency_seconds_sum[5m]) / rate(ts_query_latency_seconds_count[5m])",
+          "legendFormat": "avg latency"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }
+    },
+    {
+      "type": "stat",
+      "title": "Node Count",
+      "targets": [
+        {
+          "expr": "ts_graph_node_count",
+          "legendFormat": "nodes"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 0 }
+    },
+    {
+      "type": "stat",
+      "title": "Edge Count",
+      "targets": [
+        {
+          "expr": "ts_graph_edge_count",
+          "legendFormat": "edges"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 0 }
+    }
+  ]
+}
