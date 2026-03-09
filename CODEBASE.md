@@ -245,12 +245,14 @@ Run: **`pytest -q`** (or **`python -m pytest -q`**). Ensure one command per line
 
 ## 13. Quick Reference: “What do I run?”
 
-- **Start stack:** `powershell -ExecutionPolicy Bypass -File ".\scripts\start-local.ps1"`
-- **Schema (fresh):** `python .\scripts\apply_schema.py --live --reset` then `python .\scripts\apply_schema.py --live`
-- **Load synthetic graph:** `python .\scripts\generate_sample_100k.py --node-count 1000 --edge-count 2500 --live`
-- **Reasoning:** `python .\scripts\run_reasoning_demo.py --live --query "Concept 39 Concept 49"`
-- **Simulation:** `python .\scripts\run_simulation.py --live --node-limit 50 --edge-limit 200`
-- **Ingestion (sample → graph):** `python .\scripts\run_ingestion_pipeline.py --acquire --source sample --live`
+Run from repo root. Use `python -m pytest` and `python scripts/...` so the same commands work on Windows, macOS, and Linux (see [PLATFORM.md](PLATFORM.md)).
+
+- **Start stack:** `docker compose -f docker/docker-compose.yml up -d` (or Windows: `.\scripts\start-local.ps1` | macOS/Linux: `./scripts/start-local.sh`)
+- **Schema (fresh):** `python scripts/apply_schema.py --live --reset` then `python scripts/apply_schema.py --live`
+- **Load synthetic graph:** `python scripts/generate_sample_100k.py --node-count 1000 --edge-count 2500 --live`
+- **Reasoning:** `python scripts/run_reasoning_demo.py --live --query "Concept 39 Concept 49"`
+- **Simulation:** `python scripts/run_simulation.py --live --node-limit 50 --edge-limit 200`
+- **Ingestion (sample → graph):** `python scripts/run_ingestion_pipeline.py --acquire --source sample --live`
 - **Tests:** `python -m pytest -q`
 
 For more detail on the full implementation and test plan, see the plan document (e.g. GOAT Full Implementation And Test Plan).

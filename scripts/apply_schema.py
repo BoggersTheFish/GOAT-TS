@@ -58,9 +58,14 @@ def wait_for_space(client: NebulaGraphClient, space_name: str, attempts: int = 2
 def main() -> None:
     parser = argparse.ArgumentParser(description="Apply NebulaGraph schema scripts.")
     parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print what would be applied; do not connect to NebulaGraph.",
+    )
+    parser.add_argument(
         "--live",
         action="store_true",
-        help="Execute against a live NebulaGraph instance instead of dry-run mode.",
+        help="Execute against a live NebulaGraph instance (default: dry-run from config).",
     )
     parser.add_argument(
         "--reset",
@@ -71,6 +76,21 @@ def main() -> None:
 
     root = ROOT
     schema_dir = root / "src" / "graph" / "schema"
+
+    if args.dry_run:
+        print("Dry-run mode: would apply schema (no connection to NebulaGraph).")
+        for script_name in ("create_space.ngql", "create_schema.ngql"):
+            path = schema_dir / script_name
+            if not path.exists():
+                print(f"  (missing: {path})")
+                continue
+            statements = [s.strip() for s in path.read_text(encoding="utf-8").split(";") if s.strip()]
+            for stmt in statements:
+                preview = stmt[:80] + "..." if len(stmt) > 80 else stmt
+                print(f"  {script_name}: {preview}")
+        print("Run with --live to apply against a running NebulaGraph (e.g. after docker compose up -d).")
+        return
+
     client = NebulaGraphClient(
         root / "configs" / "graph.yaml",
         dry_run_override=not args.live if args.live else None,

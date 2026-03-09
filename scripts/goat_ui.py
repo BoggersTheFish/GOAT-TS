@@ -162,16 +162,34 @@ def main() -> None:
         sys.exit(1)
 
     root = tk.Tk()
-    root.title("GOAT Engine")
-    root.minsize(480, 420)
-    root.geometry("560x480")
+    root.title("GOAT Engine — Thinking System")
+    root.minsize(600, 520)
+    root.geometry("700x580")
+    root.configure(bg="#1a1b26")
+
+    # Accent styling for primary actions (clam theme allows custom colors)
+    style = ttk.Style(root)
+    try:
+        style.theme_use("clam")
+    except Exception:
+        pass
+    style.configure("TFrame", background="#1a1b26")
+    style.configure("TLabel", background="#1a1b26", foreground="#c0caf5", padding=(4, 4))
+    style.configure("Accent.TButton", background="#7aa2f7", foreground="#1a1b26", padding=(14, 8))
+    style.map("Accent.TButton", background=[("active", "#89b4fa"), ("pressed", "#6b8cd4")])
+    style.configure("Dim.TLabel", background="#1a1b26", foreground="#565f89", padding=(4, 0))
 
     # State: which step we're on (1..6). Step 0 = Docker, 1 = Schema, 2 = Data, 3 = Simulation, 4 = Reasoning, 5 = Debug always
     step_done = [False, False, False, False, False]  # Docker, Schema, Data, Sim, Reasoning
     current_step = 0
 
-    main_f = ttk.Frame(root, padding=12)
+    main_f = ttk.Frame(root, padding=16)
     main_f.pack(fill=tk.BOTH, expand=True)
+
+    # Header
+    ttk.Label(main_f, text="GOAT Engine", style="TLabel", font=("Segoe UI", 14, "bold")).pack(anchor=tk.W)
+    ttk.Label(main_f, text="Thinking System — Docker → Schema → Data → Simulation → Reasoning", style="Dim.TLabel").pack(anchor=tk.W)
+    ttk.Separator(main_f, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=(8, 12))
 
     step_labels = [
         ("1. Docker", "Start Docker Desktop, then start local services."),
@@ -206,12 +224,29 @@ def main() -> None:
     query_var = tk.StringVar(value="Wikipedia supports knowledge.")
     query_frame = ttk.Frame(main_f)
     ttk.Label(query_frame, text="Query:").pack(anchor=tk.W)
-    query_entry = ttk.Entry(query_frame, textvariable=query_var, width=50)
+    query_entry = ttk.Entry(query_frame, textvariable=query_var, width=52)
     query_entry.pack(fill=tk.X, pady=4)
-    reason_btn = ttk.Button(query_frame, text="Run reasoning")
+    reason_btn = ttk.Button(query_frame, text="Run reasoning", style="Accent.TButton")
 
-    result_text = scrolledtext.ScrolledText(main_f, height=8, width=60, font=("Consolas", 9))
-    result_text.pack(fill=tk.BOTH, expand=True, pady=8)
+    # Output log area with label and placeholder
+    ttk.Label(main_f, text="Output", style="TLabel").pack(anchor=tk.W, pady=(8, 2))
+    output_placeholder = "Output will appear here when you run simulation or reasoning."
+    result_text = scrolledtext.ScrolledText(
+        main_f,
+        height=12,
+        width=72,
+        font=("Consolas", 9),
+        bg="#16161e",
+        fg="#a9b1d6",
+        insertbackground="#a9b1d6",
+        relief=tk.FLAT,
+        padx=10,
+        pady=8,
+    )
+    result_text.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
+    result_text.insert(tk.END, output_placeholder)
+    result_text.tag_configure("placeholder", foreground="#565f89")
+    result_text.tag_add("placeholder", "1.0", tk.END)
 
     # Progress bar for operations that may take >5s
     progress_frame = ttk.Frame(main_f)
@@ -313,21 +348,22 @@ def main() -> None:
 
         if current_step == 0:
             status_var.set("Start Docker Desktop, then click the button to start local services (NebulaGraph, Redis).")
-            action_btn.config(text="Start local services (docker compose up -d)", command=do_docker)
+            action_btn.config(text="Start local services (docker compose up -d)", command=do_docker, style="Accent.TButton")
             action_btn.pack(pady=12)
         elif current_step == 1:
             status_var.set("Apply the graph schema to the running NebulaGraph instance.")
-            action_btn.config(text="Apply schema (live)", command=do_schema)
+            action_btn.config(text="Apply schema (live)", command=do_schema, style="Accent.TButton")
             action_btn.pack(pady=12)
         elif current_step == 2:
             status_var.set("Load data into the graph. Choose sample or real corpus.")
+            action_btn.config(style="TButton")
             data_frame.pack(anchor=tk.W, pady=8)
             data_btn_sample.pack(pady=4)
             data_btn_acquire.pack(pady=4)
             data_btn_extract.pack(pady=4)
         elif current_step >= 3:
             status_var.set("Graph is ready. Run simulation and/or reasoning.")
-            action_btn.config(text="Run simulation (live)", command=do_simulation)
+            action_btn.config(text="Run simulation (live)", command=do_simulation, style="Accent.TButton")
             action_btn.pack(pady=12)
             query_frame.pack(anchor=tk.W, pady=8)
             reason_btn.pack(pady=4)
@@ -340,8 +376,10 @@ def main() -> None:
             return
 
         def task() -> tuple[bool, str]:
+            # Use forward slashes so Docker Compose gets a consistent path on all platforms
+            compose_path = compose.as_posix()
             code, out, err = _run(
-                ["docker", "compose", "-f", str(compose), "up", "-d"],
+                ["docker", "compose", "-f", compose_path, "up", "-d"],
                 timeout=60,
             )
             msg = out + ("\n" + err if err else "")

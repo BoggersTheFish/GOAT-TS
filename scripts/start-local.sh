@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
-set -euo pipefail
+# Start local TS stack (NebulaGraph, Redis, Spark). Use from repo root.
+# macOS / Linux. For Windows use: .\scripts\start-local.ps1
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-COMPOSE_FILE="${ROOT_DIR}/docker/docker-compose.yml"
+set -e
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+COMPOSE_FILE="$ROOT/docker/docker-compose.yml"
 
-if ! command -v docker >/dev/null 2>&1; then
-  echo "Docker is not installed or not on PATH. Start Docker Desktop and verify 'docker --version' works." >&2
+if ! command -v docker &>/dev/null; then
+  echo "Docker is not installed or not on PATH. Install Docker and ensure 'docker --version' works."
   exit 1
 fi
 
-echo "Starting local TS services from ${COMPOSE_FILE}"
-if ! docker compose -f "${COMPOSE_FILE}" up -d; then
-  echo "docker compose failed. Review the output above for the failing service or image." >&2
-  exit 1
-fi
+echo "Starting local TS services from $COMPOSE_FILE"
+docker compose -f "$COMPOSE_FILE" up -d
 
+echo ""
 echo "Expected local ports:"
 echo "  NebulaGraph graphd: 9669"
 echo "  NebulaGraph metad: 9559"

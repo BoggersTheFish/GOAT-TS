@@ -29,37 +29,71 @@ GOAT/
 
 ## Quick Start
 
-1. Create a virtual environment and install dependencies:
+Run all commands from the **repository root**. Use `python -m pytest` (and `python scripts/...`) so the same command works on Windows, macOS, and Linux.
 
-   ```powershell
-   python -m venv .venv
-   .\.venv\Scripts\Activate.ps1
-   pip install -r requirements.txt
-   ```
+### 1. Virtual environment and dependencies
 
-2. Start local infrastructure:
+**Windows (PowerShell):**
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
 
-   ```powershell
-   .\scripts\start-local.ps1
-   ```
+**macOS / Linux (bash):**
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
 
-3. Apply the graph schema:
+### 2. Start local infrastructure (NebulaGraph, Redis, Spark)
 
-   ```powershell
-   python .\scripts\apply_schema.py --live
-   ```
+**All platforms (Docker Compose V2):**
+```bash
+docker compose -f docker/docker-compose.yml up -d
+```
 
-4. Generate a local sample graph:
+**Windows only (alternative):** `.\scripts\start-local.ps1`  
+**macOS / Linux only (alternative):** `bash scripts/start-local.sh` or `chmod +x scripts/start-local.sh && ./scripts/start-local.sh`
 
-   ```powershell
-   python .\scripts\generate_sample_100k.py --node-count 100000 --edge-count 250000 --live
-   ```
+Wait until services are up: `docker compose -f docker/docker-compose.yml ps` should show graphd, storaged, metad, redis, spark as running.
 
-5. Run smoke tests:
+### 3. Apply the graph schema
 
-   ```powershell
-   pytest -q
-   ```
+```bash
+python scripts/apply_schema.py --dry-run
+python scripts/apply_schema.py --live
+```
+
+(On Windows you can use `python .\scripts\apply_schema.py`; forward slashes in paths work in Python on all platforms.)
+
+### Connection and auth
+
+- **NebulaGraph** default is `root` / `nebula`, host `127.0.0.1`, port `9669`. Set in `configs/graph.yaml`. Change `username` / `password` there if your instance differs.
+- Scripts use **`--live`** to talk to the real graph; without `--live` they use dry-run (no connection). Prefer **`--dry-run`** first when a script supports it.
+
+### 4. Generate a local sample graph
+
+```bash
+python scripts/generate_sample_100k.py --node-count 1000 --edge-count 2500 --live
+```
+
+### 5. Run smoke tests
+
+```bash
+python -m pytest -q
+```
+
+At least one trivial test (`tests/test_placeholder.py`) and the milestone tests should pass. See `pytest.ini` for ignored modules.
+
+## Why this works on your system (and others)
+
+- **Paths:** All scripts use `pathlib.Path` and `ROOT = Path(__file__).resolve().parents[1]`. Paths are built with `ROOT / "scripts" / "file.py"` and passed as `str(...)` only when needed (e.g. subprocess, config). So path separators are correct on Windows (`\`) and Unix (`/`).
+- **Subprocess:** Scripts call `subprocess.run([sys.executable, ...], cwd=str(ROOT))` with a **list** of arguments (no `shell=True`). The same Python and working directory are used on every OS.
+- **Environment:** When spawning subprocesses, scripts set `PYTHONPATH=str(ROOT)` (or `cwd=ROOT`) so imports resolve the same way as in your terminal when you run from repo root.
+- **Docker:** The compose file path is passed as a single argument; Docker Compose accepts both forward and backslash paths. The UI uses a normalized path for the compose file when starting services.
+- **One command per line:** In PowerShell, `&&` is not valid; use `;` or run commands separately. The README uses one command per block so you can copy-paste safely on any shell.
 
 ## Phase Milestones
 
@@ -105,3 +139,4 @@ This project is open source. See [LICENSE](LICENSE) in the repository root for t
 - The code includes dry-run and fallback logic so the repository can be exercised without a live graph database or GPU.
 - Scale targets from the plan are represented as configuration and workload scripts; full production execution still requires cloud infrastructure and significant runtime resources.
 - The `--live` flags on scripts switch from the default dry-run mode to real NebulaGraph execution.
+- **Portability:** The same repo and commands are intended to work on Windows, macOS, and Linux. See [PLATFORM.md](PLATFORM.md) for how this is done and how to verify on your system.
