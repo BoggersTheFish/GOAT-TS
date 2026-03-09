@@ -1,0 +1,11 @@
+{
+  "nodes": [
+    {"node_id": "concept_1", "label": "Python", "mass": 1.2, "activation": 0.8},
+    {"node_id": "concept_2", "label": "programming language", "mass": 0.9, "activation": 0.5},
+    {"node_id": "concept_3", "label": "Wikipedia", "mass": 1.0, "activation": 0.6}
+  ],
+  "edges": [
+    {"src_id": "concept_1", "dst_id": "concept_2", "weight": 0.85},
+    {"src_id": "concept_1", "dst_id": "concept_3", "weight": 0.3}
+  ]
+}

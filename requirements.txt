@@ -10,11 +10,15 @@ numpy>=1.24.0
 pytest>=8.0.0
 # Config and HTTP
 pyyaml>=6.0.2
+python-dotenv>=1.0.0
 requests>=2.32.0
 pydantic>=2.0.0
 tqdm>=4.65.0
 # Graph and simulation
 networkx>=3.4.0
+matplotlib>=3.7.0
+# Vector index (external backend; embeddings in node metadata)
+faiss-cpu>=1.7.4
 # Optional for full stack (Spark, Redis, monitoring)
 pyarrow>=14.0.0
 pyspark>=3.5.0

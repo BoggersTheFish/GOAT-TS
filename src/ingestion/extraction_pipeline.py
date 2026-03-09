@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
+import uuid
 from pathlib import Path
 from typing import Iterable
 
@@ -15,9 +15,13 @@ from src.ingestion.llm_extract import TripleExtractor
 # Cluster/topic nodes use this label prefix so retrieval can find them.
 CLUSTER_LABEL_PREFIX = "topic: "
 
+# UUIDv5 namespace for GOAT node IDs (collision avoidance per spec).
+GOAT_NAMESPACE = uuid.UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
+
 
 def stable_node_id(seed: str) -> str:
-    return hashlib.sha1(seed.strip().lower().encode("utf-8")).hexdigest()[:16]
+    """Deterministic node ID via UUIDv5 (spec: collision avoidance)."""
+    return str(uuid.uuid5(GOAT_NAMESPACE, seed.strip().lower().encode("utf-8"))).replace("-", "")[:32]
 
 
 def _triples_to_graph_for_chunk(
@@ -197,9 +201,16 @@ def extract_from_texts(
     *,
     use_clusters: bool = True,
     max_nodes_per_label: int = 10,
+    llm_config_path: Path | None = None,
 ) -> tuple[list[Node], list[Edge], list[Wave], list[Edge]]:
-    """Returns (concept/cluster nodes, relates edges, waves, in_wave edges)."""
-    extractor = TripleExtractor(config_root / "configs" / "llm.yaml")
+    """Returns (concept/cluster nodes, relates edges, waves, in_wave edges).
+
+    Extractor: TripleExtractor from configs/llm.yaml. If enable_model_inference is true,
+    uses Hugging Face text2text-generation (e.g. google/flan-t5-base); otherwise
+    regex fallback (subject is/has/uses object). Set --config or config_root for custom path.
+    """
+    config_path = llm_config_path or (config_root / "configs" / "llm.yaml")
+    extractor = TripleExtractor(config_path)
     text_list = list(texts)
     cluster_nodes: list[Node] = []
     concept_nodes: list[Node] = []
@@ -247,12 +258,29 @@ def load_into_graph(
     live: bool = False,
     use_clusters: bool = True,
     max_nodes_per_label: int = 10,
+    llm_config_path: Path | None = None,
+    global_merge: bool = False,
+    merge_threshold: float = 0.8,
 ) -> dict[str, int]:
     nodes, edges, waves, in_wave_edges = extract_from_texts(
         texts, config_root,
         use_clusters=use_clusters,
         max_nodes_per_label=max_nodes_per_label,
+        llm_config_path=llm_config_path,
     )
+    if global_merge and nodes:
+        from src.graph.cluster_merge import global_concept_merge
+        config_path = config_root / "configs" / "graph.yaml"
+        all_edges = edges + in_wave_edges
+        nodes, all_edges = global_concept_merge(
+            nodes, all_edges,
+            similarity_threshold=merge_threshold,
+            config_path=config_path if config_path.exists() else None,
+        )
+        # Split back: in_wave has dst_id in wave_ids
+        wave_ids = {w.wave_id for w in waves}
+        edges = [e for e in all_edges if e.dst_id not in wave_ids]
+        in_wave_edges = [e for e in all_edges if e.dst_id in wave_ids]
     client = NebulaGraphClient(
         config_root / "configs" / "graph.yaml",
         dry_run_override=False if live else None,
@@ -328,9 +356,25 @@ def main() -> None:
         default=10,
         help="Max concept nodes to keep per label when pruning (default 10).",
     )
+    parser.add_argument(
+        "--config",
+        help="Path to LLM/extraction config (default: configs/llm.yaml). Extractor uses enable_model_inference and model_name.",
+    )
+    parser.add_argument(
+        "--global-merge",
+        action="store_true",
+        help="Run global concept merge (FAISS similarity > threshold) before inserting into graph.",
+    )
+    parser.add_argument(
+        "--merge-threshold",
+        type=float,
+        default=0.8,
+        help="Cosine similarity threshold for global merge (default 0.8).",
+    )
     args = parser.parse_args()
 
     root = Path(__file__).resolve().parents[2]
+    llm_config = Path(args.config) if args.config else None
     input_path = Path(args.input_path)
     if not input_path.exists():
         raise SystemExit(f"Input path does not exist: {input_path}")
@@ -342,6 +386,9 @@ def main() -> None:
         live=args.live,
         use_clusters=not args.no_clusters,
         max_nodes_per_label=args.max_nodes_per_label,
+        llm_config_path=llm_config,
+        global_merge=args.global_merge,
+        merge_threshold=args.merge_threshold,
     )
     print(stats)
 

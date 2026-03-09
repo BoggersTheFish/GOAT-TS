@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import asdict
 import json
 from pathlib import Path
@@ -7,6 +8,28 @@ from typing import Any, Callable, Iterable
 
 from src.graph.models import Edge, MemoryState, Node, Wave
 from src.utils import load_yaml_config
+
+
+def _apply_graph_env_overrides(config: dict[str, Any], config_path: Path) -> None:
+    """Load .env from repo root and override graph host/port/username/password if set."""
+    try:
+        from dotenv import load_dotenv
+        resolved = Path(config_path).resolve()
+        root = resolved.parents[1] if "configs" in resolved.parts else resolved.parent
+        load_dotenv(root / ".env")
+    except ImportError:
+        return
+    if os.getenv("NEBULA_HOST"):
+        config["host"] = os.getenv("NEBULA_HOST")
+    if os.getenv("NEBULA_PORT"):
+        try:
+            config["port"] = int(os.getenv("NEBULA_PORT", ""))
+        except ValueError:
+            pass
+    if os.getenv("NEBULA_USERNAME"):
+        config["username"] = os.getenv("NEBULA_USERNAME")
+    if os.getenv("NEBULA_PASSWORD"):
+        config["password"] = os.getenv("NEBULA_PASSWORD")
 
 
 class InMemoryGraphStore:
@@ -56,7 +79,9 @@ class NebulaGraphClient:
         config_path: str | Path = "configs/graph.yaml",
         dry_run_override: bool | None = None,
     ) -> None:
-        self.config = load_yaml_config(config_path)["graph"]
+        path = Path(config_path)
+        self.config = load_yaml_config(path)["graph"].copy()
+        _apply_graph_env_overrides(self.config, path.parents[1] if "configs" in path.parts else path.parent)
         if dry_run_override is not None:
             self.config["dry_run"] = dry_run_override
         self._store = InMemoryGraphStore()

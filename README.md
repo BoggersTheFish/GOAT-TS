@@ -18,6 +18,7 @@ This repository implements a local-first scaffold for the Thinking System (TS) a
 ```text
 GOAT/
 ├── docker/
+├── examples/
 ├── infra/
 ├── src/
 ├── configs/
@@ -26,6 +27,7 @@ GOAT/
 ├── requirements.txt
 └── README.md
 ```
+See `examples/README.md` for sample input and example export shape.
 
 ## Quick Start
 
@@ -70,7 +72,7 @@ python scripts/apply_schema.py --live
 
 ### Connection and auth
 
-- **NebulaGraph** default is `root` / `nebula`, host `127.0.0.1`, port `9669`. Set in `configs/graph.yaml`. Change `username` / `password` there if your instance differs.
+- **NebulaGraph** default is `root` / `nebula`, host `127.0.0.1`, port `9669`. Set in `configs/graph.yaml`, or use a **`.env`** file (see `examples/.env.example` or root `.env.example`) so credentials are not committed: `NEBULA_HOST`, `NEBULA_PORT`, `NEBULA_USERNAME`, `NEBULA_PASSWORD`. The client loads these via `python-dotenv` and overrides the YAML values when present.
 - Scripts use **`--live`** to talk to the real graph; without `--live` they use dry-run (no connection). Prefer **`--dry-run`** first when a script supports it.
 
 ### 4. Generate a local sample graph
@@ -86,6 +88,23 @@ python -m pytest -q
 ```
 
 At least one trivial test (`tests/test_placeholder.py`) and the milestone tests should pass. See `pytest.ini` for ignored modules.
+
+### Verification and debug (after ingestion)
+
+- **List concepts in a wave:** `python scripts/query_wave.py --list --live` then `python scripts/query_wave.py --wave-id <id> --live`
+- **Graph stats:** `python scripts/dump_graph_stats.py --live`
+- **Export subgraph (JSON + optional PNG):** `python scripts/export_subgraph.py --concept "Concept 1" --live --output out.json --plot out.png`
+- **Gravity demo (no DB write):** `python scripts/run_gravity_demo.py --live --iterations 100 --output positions.json --plot layout.png`
+
+### Reasoning
+
+Run a reasoning-loop demo (query → activated nodes, tension, hypotheses):
+
+```bash
+python scripts/run_reasoning_demo.py --query "Wikipedia supports free knowledge and Wikidata supports structured facts." --live
+```
+
+Omit `--live` to use dry-run graph context.
 
 ## Why this works on your system (and others)
 
@@ -110,6 +129,7 @@ At least one trivial test (`tests/test_placeholder.py`) and the milestone tests 
    - `--source wikipedia-api`: fetch article summaries via Wikipedia REST API
    - `--source wikipedia-sample`: download and optionally parse an XML dump
    Use `--output-dir`, `--max-docs`, and `--parse` as needed.
+   For a **1k–5k doc run**, use e.g. `--source wikipedia-api --max-docs 5000`; then run extraction and `dump_graph_stats --live` to inspect the graph.
 
 2. **Spark ETL** – `scripts/run_spark_etl.py` reads text (one chunk per line) and writes parquet with a `value` column for the extraction pipeline. Default input: `data/raw/wikipedia/abstracts.txt`; default output: `data/processed/corpus.parquet`. Requires Java (`JAVA_HOME` set).
 

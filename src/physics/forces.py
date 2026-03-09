@@ -1,6 +1,51 @@
 from __future__ import annotations
 
+import logging
 import numpy as np
+
+logger = logging.getLogger(__name__)
+
+
+def approximate_neighbor_pairs(
+    positions: np.ndarray,
+    k: int = 50,
+    *,
+    use_faiss: bool = True,
+) -> list[tuple[int, int]]:
+    """
+    Return list of (i, j) index pairs that are approximate k-NN by position (L2).
+    Each pair appears once with i < j. Used to limit force calculations to nearby nodes (FAISS ANN).
+    """
+    n = positions.shape[0]
+    if n <= 1:
+        return []
+    positions = np.asarray(positions, dtype=np.float32)
+    if positions.ndim == 1:
+        positions = positions.reshape(-1, 1)
+    dim = positions.shape[1]
+    k = min(k, n - 1)
+    if k <= 0:
+        return []
+
+    if use_faiss:
+        try:
+            import faiss
+        except ImportError:
+            use_faiss = False
+    if use_faiss:
+        index = faiss.IndexFlatL2(dim)
+        index.add(positions)
+        distances, indices = index.search(positions, k + 1)  # +1 to drop self
+        pairs: set[tuple[int, int]] = set()
+        for i in range(n):
+            for j_idx in indices[i]:
+                j = int(j_idx)
+                if j < 0 or i == j:
+                    continue
+                pairs.add((min(i, j), max(i, j)))
+        return sorted(pairs)
+    # Fallback: all pairs (no FAISS) - caller can avoid using this for large n
+    return [(i, j) for i in range(n) for j in range(i + 1, n)]
 
 
 def _safe_direction(source: np.ndarray, target: np.ndarray) -> tuple[np.ndarray, float]:

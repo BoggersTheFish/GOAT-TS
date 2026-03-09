@@ -1,0 +1,34 @@
+{
+  "iterations": 20,
+  "node_count": 3,
+  "edge_count": 3,
+  "nodes": [
+    {
+      "node_id": "a",
+      "label": "Concept A",
+      "position": [
+        -0.6237685680389404,
+        -0.28454872965812683,
+        0.0
+      ]
+    },
+    {
+      "node_id": "b",
+      "label": "Concept B",
+      "position": [
+        1.8076674938201904,
+        -0.4905798137187958,
+        0.0
+      ]
+    },
+    {
+      "node_id": "c",
+      "label": "Concept C",
+      "position": [
+        0.4216614067554474,
+        1.7173786163330078,
+        0.0
+      ]
+    }
+  ]
+}

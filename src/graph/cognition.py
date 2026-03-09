@@ -24,3 +24,6 @@ EDGE_IN_WAVE = "in_wave"
 # Source identifiers for wave nodes.
 WAVE_SOURCE_INGESTION = "ingestion"
 WAVE_SOURCE_REASONING = "reasoning"
+
+# Cluster/topic nodes use this label prefix (used by cluster_merge, client).
+CLUSTER_LABEL_PREFIX = "topic: "

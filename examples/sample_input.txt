@@ -1,0 +1,4 @@
+Python is a programming language. Python has many libraries for data science.
+Wikipedia is an online encyclopedia. Wikipedia has articles in many languages.
+NebulaGraph is a graph database. It supports distributed storage and query.
+Knowledge graphs represent entities and relations. They are used in search and reasoning.

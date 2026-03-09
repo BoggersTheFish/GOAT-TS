@@ -7,9 +7,18 @@ import numpy as np
 from src.graph.constraints import cosine_similarity
 from src.graph.models import Edge
 from src.graph.models import Node
-from src.physics.forces import attraction_force, repulsion_force, spring_force
+from src.physics.forces import (
+    attraction_force,
+    approximate_neighbor_pairs,
+    repulsion_force,
+    spring_force,
+)
 from src.physics.simulation import integrate_step
 from src.utils import load_yaml_config
+
+# Use FAISS approximate neighbors when node count exceeds this (avoids O(n^2) death)
+FAISS_FORCE_NODE_THRESHOLD = 200
+FAISS_K_NEIGHBORS = 50
 
 
 @dataclass(slots=True)
@@ -58,6 +67,9 @@ def compute_forces(
     state: SimulationState,
     edges: list[Edge] | None = None,
     config_path: str = "configs/simulation.yaml",
+    *,
+    use_faiss_approx: bool = True,
+    faiss_k: int = FAISS_K_NEIGHBORS,
 ) -> np.ndarray:
     config = load_yaml_config(config_path)["simulation"]
     g_const = float(config["gravitational_constant"])
@@ -70,27 +82,33 @@ def compute_forces(
 
     forces = np.zeros_like(state.positions, dtype=np.float32)
     index_map = {node_id: idx for idx, node_id in enumerate(state.node_ids)}
+    n = len(state.node_ids)
 
-    for src_idx in range(len(state.node_ids)):
+    use_approx = use_faiss_approx and n >= FAISS_FORCE_NODE_THRESHOLD
+    if use_approx:
+        pairs = approximate_neighbor_pairs(state.positions, k=faiss_k, use_faiss=True)
+    else:
+        pairs = [(i, j) for i in range(n) for j in range(i + 1, n)]
+
+    for src_idx, dst_idx in pairs:
         src_pos = state.positions[src_idx]
-        for dst_idx in range(src_idx + 1, len(state.node_ids)):
-            dst_pos = state.positions[dst_idx]
-            repulsive = repulsion_force(src_pos, dst_pos, repulsion_constant=repulsion, epsilon=epsilon)
-            forces[src_idx] += repulsive
-            forces[dst_idx] -= repulsive
+        dst_pos = state.positions[dst_idx]
+        repulsive = repulsion_force(src_pos, dst_pos, repulsion_constant=repulsion, epsilon=epsilon)
+        forces[src_idx] += repulsive
+        forces[dst_idx] -= repulsive
 
-            similarity = 0.0
-            if state.embeddings is not None:
-                similarity = cosine_similarity(state.embeddings[src_idx], state.embeddings[dst_idx])
-            attractive = attraction_force(
-                src_pos,
-                dst_pos,
-                similarity=similarity,
-                attraction_constant=g_const,
-                epsilon=epsilon,
-            )
-            forces[src_idx] += attractive
-            forces[dst_idx] -= attractive
+        similarity = 0.0
+        if state.embeddings is not None:
+            similarity = cosine_similarity(state.embeddings[src_idx], state.embeddings[dst_idx])
+        attractive = attraction_force(
+            src_pos,
+            dst_pos,
+            similarity=similarity,
+            attraction_constant=g_const,
+            epsilon=epsilon,
+        )
+        forces[src_idx] += attractive
+        forces[dst_idx] -= attractive
 
     if edges:
         for edge in edges:

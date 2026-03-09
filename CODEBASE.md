@@ -216,6 +216,9 @@ So simulation **does** write back to the graph when `--live` is used.
 | **`scripts/run_batch_ingestion.py`** | Alternative batch ingestion (acquire + optional Spark ETL + extraction). |
 | **`scripts/run_spark_etl.py`** | Spark ETL only (text → parquet). |
 | **`scripts/goat_ui.py`** | Optional UI entry point. |
+| **`scripts/query_wave.py`** | List concepts in a wave: `--wave-id <id>` or `--list` waves. `--live`. |
+| **`scripts/dump_graph_stats.py`** | Print node/edge/wave counts. `--live`, `--sample-limit`. |
+| **`scripts/export_subgraph.py`** | Export concept-centered subgraph: `--concept "X"` `--hops 2` `--output out.json` `--plot out.png`. `--live`. |
 
 ---
 
