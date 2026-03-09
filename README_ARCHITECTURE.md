@@ -1,228 +1,116 @@
 # GOAT-TS Architecture Reference
 
-This document is the **technical architecture reference** for GOAT-TS: ingestion, graph storage, simulation, reasoning, and compliance with the specified baseline (Steps 1–7). For setup, quick start, and usage see [README.md](README.md).
+This document describes the **technical architecture of the system we currently have**: ingestion, graph storage, simulation, reasoning, cognition loop, and how it aligns with the specified baseline (Steps 1–7). For **what the system does, how to use it, and why it’s useful**, see [README.md](README.md).
 
-**Repository:** [github.com/BoggersTheFish/GOAT-TS](https://github.com/BoggersTheFish/GOAT-TS) (local path: GOAT).
-
----
-
-
-## 1. Ingestion Pipeline
-
-- **Acquisition**
-  - `scripts/acquire_dumps.py`: Downloads or generates corpus text (`--source sample | wikipedia-api | wikipedia-sample`), writes to `data/raw/` (e.g. `wikipedia/abstracts.txt`). Uses Wikipedia REST API or built-in samples.
-  - `scripts/generate_sample_100k.py`: Generates synthetic graph data (nodes + edges) for testing; can write to NebulaGraph with `--live`.
-- **ETL**
-  - `scripts/run_spark_etl.py`: Reads text (e.g. one chunk per line), writes Parquet with a `value` column. Default input `data/raw/wikipedia/abstracts.txt`, output `data/processed/corpus.parquet`. Requires Java / Spark.
-- **Extraction**
-  - `src/ingestion/extraction_pipeline.py`: Consumes `.txt` or Parquet (with `value` column). Uses regex and/or LLM (`src/ingestion/llm_extract.py`, TripleExtractor) to produce triples. Builds **waves**, **nodes** (concepts + cluster/topic nodes), **relates** and **in_wave** edges. Node IDs from `stable_node_id()` (UUIDv5 namespaced; see §8). Writes to NebulaGraph when `--live`.
-  - Cluster/topic nodes use label prefix `topic: `. Per-chunk clustering (context-scoped node IDs like `topic_id:subject`).
-- **Support**
-  - `src/ingestion/spark_read_dumps.py`, `src/ingestion/memory_init.py`, `scripts/run_batch_ingestion.py`, `scripts/run_ingestion_pipeline.py` tie acquire/ETL/extraction together.
+**Repository:** [github.com/BoggersTheFish/GOAT-TS](https://github.com/BoggersTheFish/GOAT-TS) (local path may be `GOAT`).
 
 ---
 
-## 2. Graph Storage (NebulaGraph)
+## 1. System overview
 
-- **Client**
-  - `src/graph/client.py`: `NebulaGraphClient` loads config from `configs/graph.yaml` (and `.env` overrides). Dry-run mode uses in-memory `InMemoryGraphStore`. Live mode connects to NebulaGraph (host, port, user, password, space `ts_graph`).
-- **Schema**
-  - `src/graph/schema/create_space.ngql`: Space `ts_graph`, `vid_type = FIXED_STRING(64)`.
-  - `src/graph/schema/create_schema.ngql`:
-    - **Tag `node`**: `label` (string), `mass` (double), `activation` (double), `state` (string), `cluster_id` (string), `metadata` (string, JSON).
-    - **Tag `wave`**: `label`, `source`, `intensity`, `coherence`, `tension`, `source_chunk_id`.
-    - **Edge `relates`**: `weight` (double).
-    - **Edge `in_wave`**: `weight` (double).
-  - Tag indexes: `node_label_index`, `node_state_index`, `wave_source_index`, `wave_source_chunk_index`. **No vector type or vector index** in schema.
-- **Models**
-  - `src/graph/models.py`: `Node` (node_id, label, mass, activation, state, cluster_id, embedding, position, velocity, metadata; optional node_type in metadata), `Edge`, `Wave`, `Triple`, `MemoryState` (ACTIVE/DORMANT/DEEP). Embeddings stored in node metadata, not as a dedicated Nebula property.
+**Current flow:** Text is acquired or generated → (optionally) Spark ETL to Parquet → extraction pipeline turns chunks into triples, then into **nodes** (concepts + topic nodes), **waves** (one per chunk), and **relates** / **in_wave** edges. The graph is stored in NebulaGraph (or in-memory for dry-run). The **cognition loop** seeds the graph, runs spreading activation, memory decay/state transitions, and optionally gravity; the **reasoning loop** takes a query, retrieves a subgraph, computes tension, and produces hypotheses. Simulation can read from the graph, run one physics step (forces, domain detection), and write updated masses and cluster IDs back.
 
 ---
 
-## 3. Physics / Simulation Stubs
+## 2. Ingestion pipeline
 
-- **Forces**
-  - `src/physics/forces.py`: `attraction_force`, `repulsion_force`, `spring_force` (NumPy). Pairwise O(n²) style (no FAISS/ANN).
-- **Gravity**
-  - `src/simulation/gravity.py`: `build_state`, `compute_forces`, `update_positions` using forces and `src/physics/simulation.py` integration. Config from `configs/simulation.yaml`.
-- **Simulation loop**
-  - `src/simulation/loop.py`: `run_simulation_step`, `run_from_graph` (snapshot from Nebula, run one step, optionally persist). Mass updates, domain detection (Louvain), no spreading activation.
+- **Acquisition:** `scripts/acquire_dumps.py` — downloads or generates corpus text (`--source sample | wikipedia-api | wikipedia-sample`), writes to `data/raw/` (e.g. `wikipedia/abstracts.txt`). `scripts/generate_sample_100k.py` generates synthetic nodes/edges for testing; can write to NebulaGraph with `--live`.
+- **ETL:** `scripts/run_spark_etl.py` — reads text (e.g. one chunk per line), writes Parquet with a `value` column. Requires Java/Spark.
+- **Extraction:** `src/ingestion/extraction_pipeline.py` — consumes `.txt` or Parquet (with `value` column). Uses regex and/or LLM (`src/ingestion/llm_extract.py`, `TripleExtractor`) to produce triples. Builds **waves**, **nodes** (concepts + cluster/topic nodes), **relates** and **in_wave** edges. Node IDs from `stable_node_id()` (UUIDv5). Writes to NebulaGraph when `--live`. Optional **global concept merging** (FAISS, `--global-merge`, `--merge-threshold`).
+- **Support:** `scripts/run_batch_ingestion.py`, `scripts/run_ingestion_pipeline.py` chain acquire → [Spark] → extraction → load.
 
 ---
 
-## 4. Reasoning Stubs
+## 3. Graph storage (NebulaGraph)
 
-- **Loop**
-  - `src/reasoning/loop.py`: Query → activate nodes (keyword/triple match), fetch subgraph, run gravity/tension, generate hypotheses from tension, optional LLM. Returns `ReasoningResponse` (activated_nodes, hypotheses, tension, graph_context). Uses graph client and reasoning config.
-- **Tension**
-  - `src/reasoning/tension.py`: `compute_tension(positions, expected_distances)` → `TensionResult` (score, high_tension_pairs). Position-based, no contradiction detection on relations.
-- **Cache**
-  - `src/reasoning/cache.py`: `CacheAdapter` backed by Redis when `cache_enabled` in `configs/reasoning.yaml`; otherwise no-op. Get/set with TTL.
+- **Client:** `src/graph/client.py` — `NebulaGraphClient` reads `configs/graph.yaml` and `.env`. Dry-run uses `InMemoryGraphStore`; live connects to NebulaGraph (space `ts_graph`).
+- **Schema:** `src/graph/schema/create_space.ngql` (space `ts_graph`, `vid_type = FIXED_STRING(64)`); `create_schema.ngql` — tag `node` (label, mass, activation, state, cluster_id, metadata), tag `wave` (label, source, intensity, coherence, tension, source_chunk_id), edges `relates` and `in_wave` with weight. Indexes on label, state, wave source. **No vector type in Nebula**; embeddings live in node metadata; FAISS is used as external vector backend.
+- **Models:** `src/graph/models.py` — `Node`, `Edge`, `Wave`, `Triple`, `MemoryState` (ACTIVE/DORMANT/DEEP). Cognition ontology in `src/graph/cognition.py` (relates, in_wave, wave sources).
 
 ---
 
-## 5. Monitoring and Deployment
+## 4. Physics and simulation
 
-- **Monitoring**
-  - `src/monitoring/metrics.py`: Prometheus metrics stubs.
-- **Deployment**
-  - `docker/`: Docker Compose for NebulaGraph, Redis, Spark.
-  - `infra/`: Present; Terraform/Ansible not verified in detail.
+- **Forces:** `src/physics/forces.py` — attraction, repulsion, spring (NumPy); FAISS-based approximate neighbor pairs for large graphs.
+- **Gravity:** `src/simulation/gravity.py` — `build_state`, `compute_forces`, `update_positions`; config from `configs/simulation.yaml`.
+- **Simulation loop:** `src/simulation/loop.py` — `run_simulation_step`, `run_from_graph` (snapshot from Nebula, one physics step, domain detection via Louvain, optional persist). Writes back mass, activation, state, cluster_id when `--live`.
 
 ---
 
-## 6. Implemented vs Missing (vs Spec)
+## 5. Reasoning
 
-*Baseline as of Step 1 (reverse-engineered state). Post–Step 1 additions (spreading activation, memory manager, FAISS forces, demo loop) are in §8–9.*
-
-| Area | Implemented | Missing |
-|------|-------------|--------|
-| Graph/node structures | ✓ Tags node/wave, edges relates/in_wave, mass/activation/state | Vector indexes; global concept merging |
-| Persistent memory | ✓ Nebula + in-memory fallback | SQLite backup; auto state transitions; graph versioning |
-| Partial activation | ✓ Attributes (activation, mass) | Full propagation; spreading activation; wave interference |
-| AGI loop | ✓ Stubs (reasoning loop, tension, hypotheses) | Loop integration with propagation; learning/adaptation |
-| Learning | ✓ Ingestion only | Feedback; contradiction resolution; reweighting |
-| Abstraction / prediction | ✗ | Concept abstraction; prediction generation; self-reflection |
-| Scalability / response gen | ✗ | Distributed execution; formal response generation pipeline |
+- **Loop:** `src/reasoning/loop.py` — Query → cache check → triple extraction on query → `retrieve_graph_context` (subgraph by keywords/clusters/waves) → tension computation → hypotheses (high-tension pairs) → cache set. Optional persistence of reasoning wave and in_wave edges when live.
+- **Tension:** `src/reasoning/tension.py` — `compute_tension(positions, expected_distances)` → `TensionResult` (score, high_tension_pairs).
+- **Cache:** `src/reasoning/cache.py` — `CacheAdapter` with Redis when `cache_enabled` in `configs/reasoning.yaml`; otherwise no-op.
 
 ---
 
-## 7. File and Dependency Summary
+## 6. Cognition loop (AGI demo)
 
-- **Key scripts**: `apply_schema.py`, `acquire_dumps.py`, `generate_sample_100k.py`, `run_spark_etl.py`, `run_simulation.py`, `run_reasoning_demo.py`, `export_subgraph.py`, `dump_graph_stats.py`, `query_wave.py`, `run_gravity_demo.py`, `goat_ui.py`.
-- **Dependencies**: nebula3-python, langchain, transformers, torch, numpy, networkx, matplotlib, pyyaml, python-dotenv, requests, tqdm, sentence-transformers; optional: pyarrow, pyspark, redis, prometheus-client.
----
+**Current implementation:** `src/agi_loop/demo_loop.py` — `run_demo()`: load or build graph → each tick: (1) spread activation from seeds (ACT-R style, `activation.py`), (2) memory tick (decay + state transitions + DEEP promotion, `memory_manager.py`), (3) optional gravity step (`gravity.build_state` → forces → update positions), (4) optional self-reflection, goal generator, curiosity, sandbox, compression. Logs ACTIVE/DORMANT/DEEP counts, top activations; can export Graphviz `.dot`. CLI: `--dry-run`, `--seed-labels`, `--seed-ids`, `--ticks`, `--decay-rate`, `--enable-forces`, `--export-dot`, `--enable-self-reflection`, `--enable-goal-generator`, `--enable-curiosity`, etc.
 
-## 8. Post–Step 1 Updates (Vector Backend and Global Merge)
-
-- **Vector index**: External backend via **FAISS** (`src/graph/vector_index.py`). Embeddings stay in node metadata in Nebula; no Nebula vector type. `EmbeddingVectorIndex` supports add, search_by_threshold, search_knn, find_similar_pairs, save/load.
-- **Global concept merging**: `src/graph/cluster_merge.py` runs after extraction: cosine similarity > 0.8 (configurable), merge nodes (combine mass, average activation, union edges) using the FAISS index. Invoked with `--global-merge` (and `--merge-threshold`) in the extraction pipeline.
-- **Node IDs**: Switched to **UUIDv5** (namespace + seed) in `extraction_pipeline.stable_node_id` for collision avoidance; VID remains within Nebula `FIXED_STRING(64)`.
-- **Requirements**: `faiss-cpu>=1.7.4` added. Cluster merge uses `sentence-transformers` for embedding when metadata has none.
-- **Config**: `configs/graph.yaml` may specify `embedding_model` for cluster merge; pipeline passes `config_root` for merge.
-
----
-
-## 9. Quick Demo: Running a Cognition Cycle
-
-A minimal standalone demo runs a multi-tick TS cognition cycle using spreading activation, memory decay/state transitions, and optional gravity. Use it as a sanity check and integration test for activation, memory, and forces.
-
-**Run (in-memory, no Nebula):**
-
+**Run (in-memory):**
 ```bash
-python -m src.agi_loop.demo_loop --dry-run --ticks 20
+python -m src.agi_loop.demo_loop --dry-run --seed-labels concept --ticks 20
 ```
 
-With seeds by label and optional Graphviz export:
-
+With Graphviz export:
 ```bash
 python -m src.agi_loop.demo_loop --dry-run --seed-labels "concept,apple" --ticks 15 --export-dot out/demo.dot --verbose
 ```
 
-**CLI options:**
+---
 
-| Option | Description |
-|--------|-------------|
-| `--graph-space` | Nebula space name (default from config). |
-| `--seed-labels` | Comma-separated label keywords (e.g. `apple,fruit`). |
-| `--seed-ids` | Comma-separated node IDs. |
-| `--ticks` | Number of simulation ticks (default 20). |
-| `--decay-rate` | Memory decay per tick (default 0.95). |
-| `--enable-forces` | Run one gravity step each tick (FAISS-approx when n≥200). |
-| `--export-dot` | Write a Graphviz `.dot` file at end (nodes by state: green=ACTIVE, gold=DORMANT, gray=DEEP). |
-| `--verbose` | More logging. |
-| `--dry-run` | Use in-memory store; if empty, a synthetic graph is generated. |
+## 7. Monitoring and deployment
 
-**Per-tick cycle:** (1) Spread activation from seed nodes (ACT-R style, `activation.py`), (2) memory tick (decay + state transitions + DEEP promotion via `memory_manager.memory_tick`), (3) optional gravity step (`gravity.build_state` → `compute_forces` → `update_positions`), (4) log ACTIVE/DORMANT/DEEP counts, top activations, coherence/tension stubs, (5) persist node updates to Nebula unless `--dry-run`.
-
-**Sample output (excerpt):**
-
-```
-Tick 1/20: ACTIVE=39 DORMANT=1 DEEP=0 | coherence=0.8019 tension=68.82
-  Top activated: [('2564a10c-8f6…', 0.184), ...]
-...
-Done. Ticks=20, Seeds=20, Final ACTIVE=... DORMANT=... DEEP=...
-```
-
-**Error handling:** The script is strict: missing seeds, failed Nebula connection, or missing modules raise clear exceptions and exit(1). Use `--dry-run` to avoid Nebula when not available.
+- **Monitoring:** `src/monitoring/metrics.py` — Prometheus metrics stubs; optional Grafana dashboard JSON under `src/monitoring/grafana/`.
+- **Deployment:** `docker/` — Docker Compose for NebulaGraph, Redis, Spark. `infra/` — Terraform, Ansible, K8s scaffolding (e.g. `infra/k8s/deployment.yaml`).
 
 ---
 
-## 10. Step 2 (Fix Architectural Weaknesses) – Compliance
+## 8. Implemented vs baseline (summary)
 
-| Spec item | Status | Notes |
-|-----------|--------|--------|
-| **Graph: external vector backend** | Done | `src/graph/vector_index.py`: `EmbeddingVectorIndex` (FAISS IndexFlatIP), add/search_knn/search_by_threshold/find_similar_pairs/save/load; embeddings in node metadata; faiss-cpu in requirements. |
-| **Global concept merging** | Done | `src/graph/cluster_merge.py`: `global_concept_merge(nodes, edges, threshold)`; filter non–topic nodes, FAISS, union-find, merge mass/activation/edges; `CLUSTER_LABEL_PREFIX` in `cognition.py`; config in `graph.yaml`. |
-| **Pipeline integration** | Done | UUIDv5 in `extraction_pipeline.stable_node_id`; `load_into_graph(global_merge, merge_threshold)`; `--global-merge`, `--merge-threshold` CLI. |
-| **Propagation logic** | Done | `src/activation.py`: damped spreading (PyTorch/NumPy), max_hops, threshold; `activate_and_propagate`, `get_activated_subgraph`. forces.py: `approximate_neighbor_pairs` (FAISS); gravity uses `use_faiss_approx`, `faiss_k`. (API is in-memory nodes/edges; demo wires client → nodes/edges → activation.) |
-| **Memory systems** | Done | `src/memory_manager.py`: `decay_activations`, `transition_states`, `apply_decay_and_transitions`, `promote_to_deep_after_ticks`, `memory_tick`; uses `MemoryState`. |
-| **Learning mechanisms** | Done | reasoning/loop: post-wave feedback; high-tension pairs → reweight relates edges (-0.2 via `update_edges`). Client has `update_edges()`. |
-| **LLM + confidence filter** | Done | `extract(require_llm=True)`; pipeline filters triples with confidence ≤ min_confidence (default 0.5). CLI: `--require-llm`, `--min-confidence`. |
-| **Memory: SQLite / Redis / versioning** | Done | InMemoryGraphStore accepts `sqlite_path`; load/save on init and after mutations. Config: `graph.sqlite_path`. `client.backup_snapshot(path)` for Nebula/versioning. |
-| **Other: error handling & concurrency** | Done | extraction_pipeline: try/except with logger.exception around extract_from_texts, global_merge, client init; `--workers N` for multiprocessing extraction. |
-
----
-
-## 11. Step 3 (Major Upgrades) – Compliance
-
-| Spec item | Status | Notes |
-|-----------|--------|--------|
-| **Activation wave propagation** (`src/graph/wave_propagation.py`) | Done | `decompose_input`, `propagate_wave` (align ×1.2 / oppose ×0.8 from embedding similarity), `run_wave_propagation`. PyTorch GPU when available. |
-| **Node importance weighting** (`src/graph/importance_weighting.py`) | Done | `update_mass_from_activation`; `evolve_edges_with_gat` (PyG GATv2Conv, optional); `apply_importance_weighting`. `torch-geometric` in requirements. |
-| **Self-reflection** (`src/reasoning/reflection.py`) | Done | `run_reflection`: post-prop tension, meta-waves (source=reflection), hypothesis nodes (NodeType.HYPOTHESIS). Optional LLM for merge prompts. |
-| **Memory consolidation** (`src/graph/consolidation.py`) | Done | `run_consolidation` (merge via cluster_merge, prune mass &lt;0.1, state transitions); `redis_tier_activations`; `schedule_consolidation` (APScheduler job). `apscheduler` in requirements. |
-| **Concept abstraction** (`src/graph/abstraction.py`) | Done | `detect_communities_louvain` (NetworkX), `create_super_nodes` (super-nodes + bidirectional relates). |
-| **Prediction generation** (`src/reasoning/prediction.py`) | Done | `forward_simulate` (multi-step propagation), `llm_forecast_from_subgraph`, `run_prediction`. |
+| Area | Implemented in current system |
+|------|-------------------------------|
+| Graph / nodes | Tags node/wave, edges relates/in_wave, mass/activation/state, indexes; FAISS vector backend; global concept merge (cluster_merge.py). |
+| Persistent memory | NebulaGraph + InMemoryGraphStore; optional SQLite backup; `backup_snapshot` for versioning. |
+| Activation / propagation | Spreading activation (activation.py), damped propagation; FAISS approx for large n. |
+| Memory system | decay_activations, state transitions (ACTIVE→DORMANT→DEEP), promote_to_deep_after_ticks, memory_tick (memory_manager.py). |
+| AGI loop | demo_loop: seeds → spread → memory_tick → optional gravity; Graphviz export. |
+| Reasoning | retrieve_graph_context, tension, hypotheses; Redis cache; optional reasoning wave persistence. |
+| Learning / feedback | Post-wave feedback; high-tension reweighting of edges (update_edges). |
+| LLM / extraction | TripleExtractor (regex + optional Hugging Face); confidence filter; require_llm, min_confidence in pipeline. |
+| Wave propagation | wave_propagation.py (decompose_input, propagate_wave, align/oppose by embedding). |
+| Importance / GAT | importance_weighting.py (update_mass_from_activation, evolve_edges_with_gat). |
+| Reflection / self-reflection | reflection.py (tension → meta-waves, hypothesis nodes); self_reflection.py (wave gaps → goal nodes). |
+| Consolidation / abstraction | consolidation.py (merge, prune, state transitions, Redis tier, APScheduler); abstraction.py (Louvain, Leiden, hierarchical, super-nodes). |
+| Prediction | prediction.py (forward_simulate, predictive_activation_error, free-energy, backprop_errors_to_edges). |
+| Layout / forces | Fruchterman-Reingold, SOM (MiniSom) in forces.py. |
+| Online learning / query | ingestion_online.py (stream_ingest, web_search, low-coherence trigger); query_handler.py (decompose_query, search_and_fetch, TF-IDF relevance). |
+| Noise filter | noise_filter.py (low-confidence filter, tension outliers via IsolationForest). |
+| Benchmarks (Step 6) | Consistency, reasoning (PuLP), efficiency, interpretability (Graphviz) in tests/test_benchmarks_step6.py. |
+| Step 7 capabilities | Goal generator, curiosity, simulation sandbox, long-term self-reflection, knowledge compression (PyG → FAISS archive). |
+| API / UI | serve_api.py (FastAPI: /run_demo, /reasoning, /health); goat_ts_gui.py (Streamlit: Setup Wizard, Config, Ingestion, Simulation, Reasoning, Monitoring, Export & API); streamlit_viz.py; optional goat_ui.py (Tk). |
 
 ---
 
-## 12. Step 4 (Integrate Suggested Algorithms) – Compliance
+## 9. Key scripts and configs
 
-| Spec item | Status | Notes |
-|-----------|--------|--------|
-| **Spreading activation** (activation.py) | Done | ACT-R with fan-out, damped iter: `act_{t+1} = sum(in)*(1-0.1)+bias` (doc + DEFAULT_DECAY=0.1). |
-| **Graph attention** (importance_weighting.py) | Done | GAT **multi-heads** (heads=4), mean over heads for node importance; evolution_scale for edge updates. |
-| **Conceptual clustering** (abstraction.py) | Done | **Leiden** via leidenalg/igraph (`detect_communities_leiden`); **hierarchical agglomerative** on embeddings (`detect_communities_hierarchical`, scipy linkage/fcluster). Reqs: leidenalg, igraph, scipy. |
-| **Predictive activation** (prediction.py) | Done | **Free-energy**: `predict_activations`, `predictive_activation_error` (predict vs actual, errors, free_energy=0.5*sum(err²)); `backprop_errors_to_edges` (scale weights by error). |
-| **Self-organizing structures** (forces.py) | Done | **Fruchterman-Reingold** (`layout_fruchterman_reingold`, `layout_fruchterman_reingold_nx`); **SOM** via **MiniSom** (`layout_som`). Reqs: minisom. |
+- **Scripts:** `apply_schema.py`, `acquire_dumps.py`, `generate_sample_100k.py`, `run_spark_etl.py`, `run_simulation.py`, `run_reasoning_demo.py`, `export_subgraph.py`, `dump_graph_stats.py`, `query_wave.py`, `run_gravity_demo.py`, `goat_ts_gui.py` (Streamlit full GUI), `streamlit_viz.py`, `serve_api.py`.
+- **Configs:** `configs/graph.yaml` (Nebula, space, dry_run, batch_size), `configs/reasoning.yaml` (cache, Redis, node_limit, edge_limit), `configs/simulation.yaml` (gravity params, use_gpu). Optional `configs/llm.yaml` for extraction.
+- **Dependencies:** nebula3-python, langchain, transformers, torch, numpy, networkx, matplotlib, pyyaml, python-dotenv, requests, tqdm, sentence-transformers, faiss-cpu; optional: pyarrow, pyspark, redis, prometheus-client, leidenalg, igraph, minisom, pulp, streamlit, torch-geometric, apscheduler.
 
 ---
 
-## 13. Step 5 (Learning Mechanisms) – Compliance
+## 10. Compliance tables (Steps 2–7)
 
-| Spec item | Status | Notes |
-|-----------|--------|--------|
-| **Auto-build from text** (`src/ingestion/ingestion_online.py`) | Done | **Stream mode** (`stream_ingest`), **web_search** (requests; Google Custom Search when API key/CSE_ID set). **Active learning**: low-coherence trigger – when coherence &lt; threshold, run `on_low_coherence` or use last chunk as query, web_search and ingest snippets. |
-| **Web search integration** (`src/graph/query_handler.py`) | Done | **Decompose** query (`decompose_query`), **search** (`search_and_fetch` via web_search), **extract triples** and **insert linked waves** (load_into_graph). **TF-IDF relevance** (scikit-learn `TfidfVectorizer` + cosine_similarity) to rank snippets (`tfidf_relevance`). `handle_query` orchestrates. |
-| **Higher-level concepts** (abstraction.py) | Done | **Cluster activation patterns** (`cluster_activation_patterns` – KMeans on activation/mass). **PyTorch autoencoders for metas** (`meta_embeddings_autoencoder` – AE on node embeddings, returns node_id → latent vector). |
-| **Noise reduction** (`src/graph/noise_filter.py`) | Done | **Discard low-conf** (`filter_low_confidence`). **IsolationForest on tensions** (`tension_outliers_isolation_forest`, `filter_tension_outliers`). **Prune in consolidation**: `run_consolidation(..., noise_filter_min_confidence=..., tension_scores=..., noise_contamination=...)`. Reqs: scikit-learn. |
+Detailed compliance for Steps 2–5 (architectural fixes, major upgrades, suggested algorithms, learning) and Steps 6–7 (benchmarks, new capabilities) is preserved in the repository history. The sections above summarize what is **currently implemented**. For exact spec items and file references, see the full architecture doc in version control or the tables previously under §§10–15 (vector backend, global merge, propagation, memory, learning, LLM, SQLite/Redis, wave propagation, importance weighting, reflection, consolidation, abstraction, prediction, online learning, query handler, noise filter, benchmarks, self-reflection, sandbox, goal generator, curiosity, compression).
 
 ---
 
-## 14. Step 6 (Benchmarks – Outperformance) – Compliance
+## 11. How to run a minimal cognition cycle
 
-Benchmarks in `tests/test_benchmarks_step6.py` ensure consistency, reasoning, efficiency, and interpretability:
+1. **Dry-run (no Docker):** `python -m src.agi_loop.demo_loop --dry-run --ticks 20`
+2. **With Docker + schema:** Start Docker, `python scripts/apply_schema.py --live`, then e.g. `python scripts/generate_sample_100k.py --node-count 1000 --edge-count 2500 --live`, then run demo without `--dry-run` (or use Streamlit GUI Setup Wizard to do the same from the browser).
 
-| Benchmark | What it does | How to run |
-|-----------|--------------|------------|
-| **Consistency (path trace)** | Builds a small graph A→B→C, traces path, asserts node/edge alignment and that activation propagates along the path. | `python -m pytest tests/test_benchmarks_step6.py::test_benchmark_consistency_path_trace -v` |
-| **Reasoning (PuLP)** | Solves a tiny LP (max 2x+3y s.t. x+y≤1, x,y≥0), asserts optimal value 3.0. | `python -m pytest tests/test_benchmarks_step6.py::test_benchmark_reasoning_pulp -v` (requires `pulp` in requirements.txt). |
-| **Efficiency (timings)** | Runs `activate_and_propagate` on a medium graph (~80 nodes), asserts duration &lt; 5 s. | `python -m pytest tests/test_benchmarks_step6.py::test_benchmark_efficiency_timings -v` |
-| **Interpretability (Graphviz)** | Calls `export_subgraph_to_dot(data, path)` with a small subgraph; asserts output file exists and contains `digraph`/`graph`. | `python -m pytest tests/test_benchmarks_step6.py::test_benchmark_interpretability_graphviz_export -v` |
-
-Run all four: `python -m pytest tests/test_benchmarks_step6.py -v`. Graphviz export is implemented in `scripts/export_subgraph.py` (`export_subgraph_to_dot`, CLI `--dot`).
-
----
-
-## 15. Step 7 (New Capabilities) – Compliance
-
-| Capability | Module | Notes |
-|------------|--------|--------|
-| **Long-term self-reflection** | `src/reasoning/self_reflection.py` | `detect_wave_gaps(waves)`, `generate_goal_nodes_for_gaps(gaps)`, `run_long_term_self_reflection(waves, ...)`. Timer global waves for gaps (time or index); creates `NodeType.GOAL` nodes. |
-| **Internal simulation** | `src/reasoning/simulation_sandbox.py` | `clone_subgraph`, `apply_hypothetical_activations/positions`, `run_sandbox_propagation`, `run_sandbox_hypothetical`. Clone subgraph, apply hypotheticals, run propagation without modifying main graph. |
-| **Goal generation** | `src/reasoning/goal_generator.py` | `tensions_to_prioritized_questions(tension, id_to_label)`, `goals_from_tension(tension, ...)`. From `TensionResult` high-tension pairs → prioritized questions. |
-| **Curiosity-driven exploration** | `src/reasoning/curiosity.py` | `activation_entropy(activations)`, `entropy_reward`, `should_trigger_curiosity_query`, `curiosity_query(query, config_root)`. Entropy rewards; auto-query web via `query_handler.handle_query` when triggered. |
-| **Knowledge compression** | `src/graph/compression.py` | `subgraph_to_vector(nodes, edges)` (PyG GNN + global pooling), `compress_and_archive`, `archive_subgraph_to_faiss`. Encode subgraph to vector, add to FAISS index for archive. |
-
-**AGI loop integration** (`src/agi_loop/demo_loop.py`): Optional flags `--enable-self-reflection`, `--self-reflection-interval`, `--enable-sandbox`, `--enable-goal-generator`, `--enable-curiosity`, `--enable-compression`, `--compression-archive`. Goal nodes from self-reflection are inserted and included in the next tick; prioritized questions feed curiosity; compression runs on selected ticks and saves to `--compression-archive` directory.
+For more usage and setup, see [README.md](README.md).

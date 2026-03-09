@@ -36,6 +36,9 @@ data/processed/
 .coverage
 htmlcov/
 
+# GUI log (Streamlit goat_ts_gui)
+.goat_ts_gui_log.txt
+
 # OS
 .DS_Store
 Thumbs.db

@@ -1,12 +1,20 @@
 # Examples
 
-This folder contains sample inputs, export shapes, and API request examples for GOAT-TS. For setup and usage see the main [README.md](../README.md).
+This folder contains **sample inputs**, **export shapes**, and **API request examples** for GOAT-TS. For setup and daily usage see the main [README.md](../README.md).
+
+---
+
+## What’s in this folder
+
+- **Sample input** — Example text for the extraction pipeline.
+- **Export shape** — Example JSON/PNG/dot output from export and demo.
+- **API request examples** — Example request bodies for the HTTP API.
 
 ---
 
 ## Sample input
 
-- **`sample_input.txt`** — Sample text (one chunk per line) for the extraction pipeline. Use with `--input-path examples/sample_input.txt` or equivalent.
+- **`sample_input.txt`** — Sample text (one chunk per line) for the extraction pipeline. Use with **`--input-path examples/sample_input.txt`** (or the full path from repo root).
 
 ---
 
@@ -18,9 +26,9 @@ This folder contains sample inputs, export shapes, and API request examples for 
   python scripts/export_subgraph.py --concept "Python" --live --output examples/out.json
   ```
 
-  Add `--plot examples/out.png` to generate a 2D layout PNG (requires a live graph with data).
+  Add **`--plot examples/out.png`** to generate a 2D layout PNG (requires a live graph with data).
 
-- **Graphviz (.dot):** Use `--dot examples/out.dot` with `export_subgraph.py`, or run the cognition loop with `--export-dot examples/demo_out.dot`.
+- **Graphviz (.dot):** Use **`--dot examples/out.dot`** with **export_subgraph.py**, or run the cognition loop with **`--export-dot examples/demo_out.dot`**.
 
 ---
 
@@ -37,17 +45,17 @@ This folder contains sample inputs, export shapes, and API request examples for 
   curl -X POST http://localhost:8000/run_demo -H "Content-Type: application/json" -d @examples/api_request.json
   ```
 
-  (If the JSON file contains multiple keys, send only the relevant object, e.g. the `run_demo.body` value.)
+  (If the JSON file contains multiple keys, send only the relevant object for the endpoint.)
 
 ---
 
 ## Environment and credentials
 
-To use Nebula credentials from a file instead of `configs/graph.yaml`, copy **`.env.example`** from the repository root to **`.env`** in the root and set:
+To use Nebula credentials from a file instead of **`configs/graph.yaml`**, copy **`.env.example`** from the repository root to **`.env`** in the root and set:
 
-- `NEBULA_HOST`
-- `NEBULA_PORT`
-- `NEBULA_USERNAME`
-- `NEBULA_PASSWORD`
+- **NEBULA_HOST**
+- **NEBULA_PORT**
+- **NEBULA_USERNAME**
+- **NEBULA_PASSWORD**
 
-The graph client loads these via `python-dotenv` and overrides the YAML values.
+The graph client loads these via **python-dotenv** and overrides the YAML values.

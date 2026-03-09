@@ -10,7 +10,7 @@ import queue
 import subprocess
 import sys
 import threading
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
@@ -22,7 +22,7 @@ _MAX_TRACKER_LINES = 2000
 
 def debug_tracker_log(message: str, level: str = "INFO") -> None:
     """Append a timestamped line to the debug tracker. Safe to call from any thread."""
-    ts = datetime.utcnow().strftime("%H:%M:%S.%f")[:-3]
+    ts = datetime.now(timezone.utc).strftime("%H:%M:%S.%f")[:-3]
     with _debug_tracker_lock:
         _debug_tracker_lines.append(f"[{ts}] [{level}] {message}")
         if len(_debug_tracker_lines) > _MAX_TRACKER_LINES:
