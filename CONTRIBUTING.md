@@ -11,6 +11,7 @@ Thanks for your interest in contributing. These guidelines help keep the repo co
 - **Development roadmap:** [ROADMAP.md](ROADMAP.md)
 - **Codebase reference:** [CODEBASE.md](CODEBASE.md)
 - **Portability:** [PLATFORM.md](PLATFORM.md)
+- **Benchmarks and evaluation:** [BENCHMARKS.md](BENCHMARKS.md)
 
 ---
 
@@ -20,7 +21,7 @@ Thanks for your interest in contributing. These guidelines help keep the repo co
 2. **Fork the repo** and create a branch (e.g. `fix/issue-123` or `feat/add-xyz`).
 3. **Make changes** following the development rules below.
 4. **Run tests** from repo root: **`python -m pytest -q`** (or **-v**). Fix or skip failing tests and document why.
-5. **Open a pull request** with a clear title and description; reference any related issues.
+5. **Open a pull request** with a clear title and description; reference any related issues. CI runs pytest and lint on push/PR.
 
 ---
 
@@ -61,6 +62,30 @@ Both should succeed without Docker or NebulaGraph.
 - **API:** **`python -m pytest tests/test_serve_api.py -v`**
 
 See **pytest.ini** for options and ignored modules.
+
+---
+
+## Good first issues
+
+Smaller, scoped tasks that are ideal for new contributors:
+
+| Task | Where | Notes |
+|------|--------|-------|
+| Add a benchmark case | `examples/benchmarks.json` | One new entry (query + expected_substring); run `scripts/run_benchmarks.py --max-cases 1` to confirm. |
+| Improve viz hover | `scripts/streamlit_viz.py` | Add or refine Plotly hover text (e.g. activation + label in tooltip). |
+| Docstring or README fix | Any `src/` or root docs | Typo, clarify a command, or one extra example. |
+| Test for a script | `tests/` | Small pytest that runs a script with `--dry-run` or `--help` and asserts exit code 0. |
+| Add a Jupyter example | `examples/` | Short notebook: load sample → run demo/reasoning → show result or viz. |
+
+Open an issue with the **Good first issue** template so maintainers can label and triage it.
+
+---
+
+## Code style
+
+- **Python:** PEP 8; type hints where sensible; docstrings for public functions and modules.
+- **Commits:** Prefer conventional style (e.g. `feat: ...`, `fix: ...`, `docs: ...`). Commit often with clear messages.
+- **Config:** Prefer YAML-driven options over hard-coded values; document new keys in README or config comments.
 
 ---
 

@@ -2,9 +2,23 @@
 
 This file summarizes **notable documentation and feature alignment changes**. For the development roadmap and stage-by-stage history see [ROADMAP.md](ROADMAP.md). For technical compliance (Steps 1–7) see [README_ARCHITECTURE.md](README_ARCHITECTURE.md).
 
+We use **semantic versioning** (e.g. v0.1.0). Tagged releases are published on the [Releases](https://github.com/BoggersTheFish/GOAT-TS/releases) page.
+
 ---
 
-## Documentation overhaul (current)
+## [0.1.0] – 2025
+
+**First tagged release (community-ready).**
+
+- **Foundation:** Core cognition loop (spreading activation, memory tick, optional gravity), dry-run/live modes, TROUBLESHOOTING.md, docstrings and error handling in demo_loop, graph client, reasoning loop, ingestion.
+- **Performance & scale:** GPU-ready gravity (PyTorch CUDA + CPU fallback), config-driven `use_gpu`; Prometheus/Grafana stubs in Docker; metrics (activation coherence, tension, simulation steps); Spark ETL compression option; `/metrics` endpoint.
+- **Advanced features:** Multi-LLM config (HuggingFace, Ollama, LangChain); goal-directed seeding (`--goal-labels`); curiosity with Wikipedia/arXiv fallback; interactive Plotly/NetworkX viz in Streamlit; provenance tracing (concept → waves) in GUI; arXiv ingestion plugin.
+- **Evaluation:** Benchmark cases in `examples/benchmarks.json`, automated runner `scripts/run_benchmarks.py`, BENCHMARKS.md; tests for goal seeding, curiosity, viz import, benchmark smoke.
+- **Community:** CONTRIBUTING.md polish, good-first-issues table, issue templates (bug, feature, good first issue), code style; Jupyter notebook `examples/goat_end_to_end.ipynb`; GitHub Actions CI (pytest, benchmark smoke, Ruff lint); promotion drafts (Reddit, X, HN) in `docs/promotion/`.
+
+---
+
+## Documentation overhaul
 
 All README and documentation files were **fully rewritten** to describe the **system we currently have**: what it does, how it’s used, and why it’s useful.
 

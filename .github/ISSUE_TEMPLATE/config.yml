@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation
+    url: https://github.com/BoggersTheFish/GOAT-TS/blob/main/README.md
+    about: README and architecture docs

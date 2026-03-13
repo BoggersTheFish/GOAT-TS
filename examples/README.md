@@ -9,6 +9,8 @@ This folder contains **sample inputs**, **export shapes**, and **API request exa
 - **Sample input** — Example text for the extraction pipeline.
 - **Export shape** — Example JSON/PNG/dot output from export and demo.
 - **API request examples** — Example request bodies for the HTTP API.
+- **Jupyter notebook** — **`goat_end_to_end.ipynb`** runs a full pipeline (load sample → cognition loop with goal seeding → reasoning → summary). Run from repo root: `jupyter notebook examples/goat_end_to_end.ipynb`.
+- **Benchmarks** — **`benchmarks.json`** defines benchmark cases; see [BENCHMARKS.md](../BENCHMARKS.md) and `scripts/run_benchmarks.py`.
 
 ---
 

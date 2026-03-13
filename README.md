@@ -214,6 +214,12 @@ It focuses on local-first workflows on Windows, macOS, and Linux and complements
 
 ---
 
+## Versioning and releases
+
+We use **semantic versioning** (e.g. v0.1.0). Tagged releases are listed under [Releases](https://github.com/BoggersTheFish/GOAT-TS/releases). See [CHANGELOG.md](CHANGELOG.md) for notable changes.
+
+---
+
 ## License
 
 This project is open source. See [LICENSE](LICENSE) in the repository root for terms.
