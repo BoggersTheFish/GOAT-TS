@@ -97,6 +97,12 @@ def _seed_nodes_from_labels(
     *,
     limit: int = 500,
 ) -> list[Node]:
+    """
+    Legacy helper kept for backwards compatibility.
+
+    Prefer `_seed_nodes_from_label_keywords`, which performs the same selection
+    but makes the intent (search by label keywords) explicit.
+    """
     if not seed_labels:
         return []
     keywords = [s.strip() for s in seed_labels if s.strip()]
@@ -155,7 +161,7 @@ def _compute_tension_stub(nodes: list[Node], edges: list[Edge]) -> float:
 
 
 def _compute_tension_result(nodes: list[Node], edges: list[Edge]):
-    """Full tension result for Step 7 goal generator / curiosity."""
+    """Full tension result for goal-generator/curiosity hooks, if available."""
     try:
         from src.reasoning.tension import compute_tension, TensionResult
     except ImportError:

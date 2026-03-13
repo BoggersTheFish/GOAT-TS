@@ -20,8 +20,13 @@ COHERENCE_TRIGGER_THRESHOLD = 0.3
 
 def web_search(query: str, *, max_results: int = 5, api_key: str | None = None) -> list[str]:
     """
-    Web search via requests. Uses a placeholder/search API; pass api_key for Google Custom Search
-    or similar. Returns list of snippet strings (or empty if no API configured).
+    Web search via `requests`.
+
+    Uses a Google Custom Search–style API when an API key is configured via
+    `api_key`, `GOAT_SEARCH_API_KEY`, or `GOOGLE_API_KEY`. Returns a list of
+    snippet strings and never raises on network/HTTP errors; failures are
+    logged and an empty list is returned so callers can safely continue
+    ingestion without external search.
     """
     if not query or not query.strip():
         return []

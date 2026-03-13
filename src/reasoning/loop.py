@@ -218,6 +218,15 @@ def retrieve_graph_context(
     *,
     extra_keywords: list[str] | None = None,
 ) -> tuple[list[Node], list[Edge]]:
+    """
+    Retrieve a bounded, query-conditioned subgraph for reasoning.
+
+    The function prefers:
+    - label and cluster matches for the query,
+    - concepts that participate in waves whose labels match the query, and
+    - nodes that are well-connected and already activated,
+    while keeping node/edge counts within limits from `reasoning.yaml`.
+    """
     reasoning_config = load_yaml_config(config_root / "configs" / "reasoning.yaml")["reasoning"]
     if node_limit is None:
         node_limit = int(reasoning_config.get("node_limit", 200))

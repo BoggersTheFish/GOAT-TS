@@ -50,6 +50,8 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+If `pytest` or modules like `nebula3` are not found, it almost always means the virtual environment is not active in the current shell or `requirements.txt` was not installed in that environment. Activate the environment and rerun installation before running tests or scripts (see also `TROUBLESHOOTING.md`).
+
 Start the **Streamlit GUI** (setup, config, ingestion, simulation, reasoning, monitoring, export, API):
 
 ```bash
@@ -199,6 +201,16 @@ Schema is in `src/graph/schema/`; apply with `python scripts/apply_schema.py --l
 ## Portability
 
 Paths use `pathlib.Path`; subprocesses use list arguments and `cwd=ROOT`. On Windows use `;` instead of `&&` to chain commands. See [PLATFORM.md](PLATFORM.md) for details and verification steps.
+
+---
+
+## Troubleshooting
+
+For common issues (Python/virtualenv, Docker and ports, NebulaGraph connection, `JAVA_HOME`/Spark, LLM configuration, GPU/CUDA, or GUI/API server problems), see:
+
+- [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
+
+It focuses on local-first workflows on Windows, macOS, and Linux and complements [PLATFORM.md](PLATFORM.md).
 
 ---
 

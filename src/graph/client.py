@@ -163,7 +163,20 @@ class InMemoryGraphStore:
 
 
 class NebulaGraphClient:
-    """Config-backed client with a dry-run in-memory fallback."""
+    """
+    Config-backed client for NebulaGraph with an in-memory dry-run fallback.
+
+    - In **dry-run** mode, all operations go through `InMemoryGraphStore` and no
+      network calls are made. This is the default when the config sets
+      `graph.dry_run: true` or when `dry_run_override` is `True`.
+    - In **live** mode, a connection pool and session are created and most
+      helpers call `_execute`, which raises `RuntimeError` with the failed
+      statement included when Nebula reports an error.
+
+    This design makes it possible to exercise the full cognition loop and
+    reasoning stack locally without Docker, while still surfacing clear errors
+    when NebulaGraph is misconfigured.
+    """
 
     def __init__(
         self,
@@ -184,6 +197,14 @@ class NebulaGraphClient:
             self._connect()
 
     def _connect(self) -> None:
+        """
+        Establish a connection pool and session to NebulaGraph.
+
+        Raises a `RuntimeError` with a clear message if client libraries are
+        missing, the pool cannot be initialized, or the target space cannot
+        be selected. Callers should either handle this explicitly or allow
+        it to fail fast so users see the underlying configuration problem.
+        """
         try:
             from nebula3.Config import Config
             from nebula3.gclient.net import ConnectionPool
@@ -200,11 +221,17 @@ class NebulaGraphClient:
         if not ok:
             raise RuntimeError("Failed to initialize NebulaGraph connection pool.")
 
-        self._pool = pool
-        self._session = pool.get_session(
-            self.config["username"], self.config["password"]
-        )
-        self._session.execute(f"USE {self.config['space']};")
+        try:
+            self._pool = pool
+            self._session = pool.get_session(
+                self.config["username"], self.config["password"]
+            )
+            self._session.execute(f"USE {self.config['space']};")
+        except Exception as exc:
+            raise RuntimeError(
+                f"Failed to select NebulaGraph space '{self.config['space']}'. "
+                "Verify that the space exists and credentials are correct."
+            ) from exc
 
     @property
     def dry_run(self) -> bool:
