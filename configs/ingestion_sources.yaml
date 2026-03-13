@@ -1,0 +1,7 @@
+# Stage 7: Optional ingestion sources (RSS, URL lists). Used by connectors and batch ingest.
+# Leave empty or omit URLs to avoid network calls.
+ingestion_sources:
+  rss_feeds: []
+  # Example: - "https://news.ycombinator.com/rss"
+  url_list: []
+  # Example: - "https://example.com/page1"

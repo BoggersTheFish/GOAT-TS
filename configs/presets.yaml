@@ -1,0 +1,30 @@
+# Stage 6: CLI/GUI presets for common workflows.
+# Use --preset <name> with demo_loop or one_click_demo; GUI can default to lightweight.
+presets:
+  quick-demo:
+    description: "Fastest run: 3 ticks, dry-run, concept seeds, no Docker."
+    ticks: 3
+    dry_run: true
+    seed_labels: "concept"
+    goal_labels: []
+    enable_forces: false
+    enable_curiosity: false
+    enable_goal_generator: false
+  full-demo:
+    description: "Full cognition: 10 ticks, optional forces and curiosity (still dry-run if no Docker)."
+    ticks: 10
+    dry_run: true
+    seed_labels: "concept"
+    goal_labels: ["knowledge", "graph"]
+    enable_forces: true
+    enable_curiosity: true
+    enable_goal_generator: true
+  lightweight:
+    description: "No Spark/Java/Docker required; all in-memory."
+    ticks: 5
+    dry_run: true
+    seed_labels: "concept"
+    goal_labels: []
+    enable_forces: false
+    enable_curiosity: false
+    enable_goal_generator: false

@@ -1,0 +1,5 @@
+# Stage 9: Optional plugins (see src/plugins/__init__.py).
+# enabled: list of module names under src/plugins/ or dotted paths.
+plugins:
+  enabled: []
+  # Example: [ "example_hook" ]

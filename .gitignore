@@ -35,9 +35,14 @@ data/processed/
 .pytest_cache/
 .coverage
 htmlcov/
+*.prof
 
 # GUI log (Streamlit goat_ts_gui)
 .goat_ts_gui_log.txt
+
+# Generated reports (self-assessment, CI benchmarks)
+examples/self_assessment_report.md
+examples/ci_benchmarks_out.json
 
 # OS
 .DS_Store

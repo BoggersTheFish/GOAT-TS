@@ -175,6 +175,9 @@ def init_session_state() -> None:
         st.session_state.api_process = None
     if "wizard_last_duration" not in st.session_state:
         st.session_state.wizard_last_duration = {}
+    # Stage 6: lightweight mode — no Docker/Spark required; all features use in-memory fallback
+    if "lightweight_mode" not in st.session_state:
+        st.session_state.lightweight_mode = False
 
 
 try:
@@ -224,6 +227,7 @@ st.sidebar.caption(f"Deps: {'✓' if st.session_state.deps_ok else '—'}")
 st.sidebar.caption(f"Docker: {'✓' if st.session_state.docker_ok else '—'}")
 st.sidebar.caption(f"Connect: {'✓' if st.session_state.connect_ok else '—'}")
 st.sidebar.caption(f"Schema: {'✓' if st.session_state.schema_applied else '—'}")
+st.sidebar.caption(f"Lightweight: {'✓' if st.session_state.get('lightweight_mode') else '—'}")
 
 # ---------- Home ----------
 if page == "Home":
@@ -246,6 +250,14 @@ if page == "Home":
 # ---------- Setup Wizard ----------
 elif page == "Setup Wizard":
     st.title("Setup Wizard")
+    lightweight = st.checkbox(
+        "Lightweight mode (no Docker/Spark — all features use in-memory fallback)",
+        value=st.session_state.get("lightweight_mode", False),
+        key="lightweight_checkbox",
+    )
+    st.session_state.lightweight_mode = lightweight
+    if lightweight:
+        st.info("Lightweight mode is on. Demos and reasoning use dry-run; Docker/Spark steps are optional.")
     steps_done = (
         (1 if st.session_state.deps_ok else 0)
         + (1 if st.session_state.docker_ok else 0)

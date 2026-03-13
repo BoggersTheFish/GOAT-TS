@@ -24,7 +24,7 @@ So: **ingest → graph → cognition loop (spread + memory + optional gravity) �
 - **Single place to try the pipeline.** One repo gives you acquisition, ETL, extraction, graph schema, activation, memory, reasoning, and simulation. You can validate the design and extend it without switching projects.
 - **Local-first.** You can develop and test with `--dry-run` and no Docker; when ready, start Docker and use `--live` for real storage and caching.
 - **Structured cognition model.** Waves and in_wave edges give you provenance (“this concept appeared in this chunk”); tension and hypotheses make reasoning interpretable; memory states (ACTIVE/DORMANT/DEEP) make decay and consolidation explicit.
-- **Ready for extension.** The roadmap (core loop → online learning/reflection → distributed/GPU → advanced features → benchmarks/API/docs) is implemented in stages; see [ROADMAP.md](ROADMAP.md) and [README_ARCHITECTURE.md](README_ARCHITECTURE.md).
+- **Ready for extension.** The roadmap (Stages 1–10: core loop → benchmarks/API → usability → integrations → scaling → community → advanced evolution) is in [ROADMAP.md](ROADMAP.md); see also [README_ARCHITECTURE.md](README_ARCHITECTURE.md) and [docs/extensions.md](docs/extensions.md).
 
 ---
 
@@ -97,6 +97,14 @@ python -m src.agi_loop.demo_loop --dry-run --seed-labels concept --ticks 10 --en
 
 Use `--dry-run` for in-memory (no Nebula); omit it and ensure Docker + schema are up for live runs.
 
+**One-click demo and presets (Stage 6):** Run a short cognition loop without touching config:
+
+```bash
+python scripts/one_click_demo.py --preset quick-demo
+```
+
+Presets (`quick-demo`, `full-demo`, `lightweight`) live in `configs/presets.yaml`; use **`--preset <name>`** with `demo_loop` or `one_click_demo`. In the GUI, **Lightweight mode** (Setup Wizard) uses in-memory fallback for all features.
+
 ### 5. HTTP API
 
 Start the API server from repo root:
@@ -108,7 +116,7 @@ uvicorn scripts.serve_api:app --reload --host 0.0.0.0 --port 8000
 | Endpoint | Description |
 |----------|-------------|
 | `POST /run_demo` | Run cognition demo. Body: `{"ticks": 5, "dry_run": true, "seed_labels": "concept"}`. |
-| `POST /reasoning` | Run reasoning loop. Body: `{"query": "your query", "live": false}`. |
+| `POST /reasoning` | Run reasoning loop. Body: `{"query": "your query", "live": false}`. Use **`output_format: "app"`** for full JSON (activated_nodes, graph_context, hypotheses). |
 | `GET /health` | Health check. |
 
 Example:
@@ -125,6 +133,21 @@ A simpler Streamlit app for running a short demo or viewing graph stats:
 python -m streamlit run scripts/streamlit_viz.py
 ```
 
+### 7. Example apps and connectors (Stage 7)
+
+- **Q&A bot:** `python scripts/app_qa_bot.py --query "What is a knowledge graph?"` (single run or interactive with `--live`).
+- **Knowledge explorer:** `python scripts/app_knowledge_explorer.py "your query" --output out.json` — subgraph + tension + hypotheses as JSON.
+- **Ingestion sources:** Configure RSS/URLs in `configs/ingestion_sources.yaml`; use `src.ingestion.connectors` for `fetch_urls` and `rss_feed_to_chunks`.
+
+### 8. Plugins and extensions (Stage 9)
+
+Enable plugins via `configs/plugins.yaml` (`plugins.enabled`). See [docs/extensions.md](docs/extensions.md) for the extensions gallery (connectors, apps, presets, API output formats).
+
+### 9. Meta-reasoning and self-assessment (Stage 10)
+
+- **Meta-reasoning:** `src.reasoning.meta_reasoning` — `repo_curiosity_scan`, `roadmap_to_hypotheses`, `run_meta_reasoning` (repo + ROADMAP → hypotheses).
+- **Self-assessment:** `python scripts/self_assessment_demo.py` — runs benchmarks and writes `examples/self_assessment_report.md`.
+
 ---
 
 ## Documentation index
@@ -133,11 +156,12 @@ python -m streamlit run scripts/streamlit_viz.py
 |----------|----------------|
 | [README.md](README.md) | This file — what the system does, why it’s useful, how to use it. |
 | [README_ARCHITECTURE.md](README_ARCHITECTURE.md) | Technical architecture: ingestion, graph, simulation, reasoning, compliance (Steps 1–7), demo loop, benchmarks. |
-| [ROADMAP.md](ROADMAP.md) | Five-stage development roadmap and how to run each stage. |
+| [ROADMAP.md](ROADMAP.md) | Development roadmap (Stages 1–10) and how to run each stage. |
 | [CODEBASE.md](CODEBASE.md) | Codebase reference: modules, data models, scripts, configs. |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute, run tests, and open PRs. |
 | [PLATFORM.md](PLATFORM.md) | Portability (Windows, macOS, Linux) and how to verify. |
 | [examples/README.md](examples/README.md) | Sample input, export shape, API request examples. |
+| [docs/extensions.md](docs/extensions.md) | Extensions gallery and plugin system (Stage 9). |
 | [CHANGELOG.md](CHANGELOG.md) | Summary of documentation and feature changes. |
 
 ---

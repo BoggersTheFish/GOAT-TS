@@ -42,3 +42,5 @@ streamlit>=1.28.0
 fastapi>=0.109.0
 uvicorn[standard]>=0.27.0
 plotly>=5.18.0
+# Stage 7: optional RSS/connectors (connectors work with fallback without this)
+feedparser>=6.0.0

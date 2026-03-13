@@ -78,17 +78,27 @@ def run_demo_endpoint(body: RunDemoRequest) -> RunDemoResponse:
 class ReasoningRequest(BaseModel):
     query: str = Field(..., min_length=1)
     live: bool = False
+    output_format: str = Field("default", description="'default' or 'app' for app-friendly JSON (includes activated_nodes, graph_context).")
 
 
 @app.post("/reasoning")
 def reasoning_endpoint(body: ReasoningRequest) -> dict:
-    """Run reasoning loop: query → activated nodes, tension, hypotheses."""
+    """Run reasoning loop: query → activated nodes, tension, hypotheses. Use output_format='app' for full JSON for apps."""
     from src.reasoning.loop import run_reasoning_loop
 
     try:
         response = run_reasoning_loop(body.query, ROOT, live=body.live)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    if (body.output_format or "").lower() == "app":
+        return {
+            "query": response.query,
+            "tension_score": response.tension.score,
+            "graph_context": response.graph_context,
+            "activated_nodes": response.activated_nodes,
+            "hypotheses": [{"prompt": h.prompt, "rationale": h.rationale} for h in response.hypotheses[:10]],
+            "answer_summary": f"Tension={response.tension.score:.4f}; {len(response.hypotheses)} hypotheses.",
+        }
     return {
         "query": response.query,
         "activated_count": len(response.activated_nodes),

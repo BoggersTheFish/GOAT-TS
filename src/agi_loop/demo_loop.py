@@ -550,6 +550,12 @@ def main() -> int:
         default="configs/graph.yaml",
         help="Graph config path.",
     )
+    parser.add_argument(
+        "--preset",
+        type=str,
+        default="",
+        help="Preset name from configs/presets.yaml (overrides ticks, seed-labels, goal-labels, flags).",
+    )
     # Step 7: new capabilities
     parser.add_argument("--enable-self-reflection", action="store_true", help="Run long-term self-reflection (wave gaps -> goal nodes).")
     parser.add_argument("--self-reflection-interval", type=int, default=5, metavar="N", help="Self-reflection every N ticks.")
@@ -559,6 +565,26 @@ def main() -> int:
     parser.add_argument("--enable-compression", action="store_true", help="Compress subgraph to FAISS archive (PyG GNN).")
     parser.add_argument("--compression-archive", type=str, default=None, metavar="PATH", help="Directory to save FAISS compression index.")
     args = parser.parse_args()
+
+    # Stage 6: apply preset from configs/presets.yaml if given
+    if args.preset:
+        try:
+            from src.utils import load_yaml_config
+            preset_path = Path(args.config).resolve().parent / "presets.yaml"
+            if preset_path.exists():
+                data = load_yaml_config(preset_path)
+                presets = data.get("presets") or {}
+                if args.preset in presets:
+                    p = presets[args.preset]
+                    args.ticks = int(p.get("ticks", args.ticks))
+                    args.dry_run = bool(p.get("dry_run", args.dry_run))
+                    args.seed_labels = ",".join(p.get("seed_labels") or ["concept"])
+                    args.goal_labels = ",".join(p.get("goal_labels") or [])
+                    args.enable_forces = bool(p.get("enable_forces", False))
+                    args.enable_curiosity = bool(p.get("enable_curiosity", False))
+                    args.enable_goal_generator = bool(p.get("enable_goal_generator", False))
+        except Exception as e:
+            logger.warning("Preset %s failed to load: %s", args.preset, e)
 
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,

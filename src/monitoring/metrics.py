@@ -32,3 +32,13 @@ tension_score = Gauge(
     "ts_tension_score",
     "Current global tension score for the graph or subgraph.",
 )
+
+# Stage 8: efficiency
+ticks_per_second = Gauge(
+    "ts_ticks_per_second",
+    "Cognition loop throughput (ticks per second) from last run.",
+)
+graph_size_nodes = Gauge(
+    "ts_graph_size_nodes",
+    "Total graph node count (for scale metrics).",
+)

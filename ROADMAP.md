@@ -100,6 +100,89 @@ python -m src.agi_loop.demo_loop --dry-run --seed-labels concept --ticks 5 --exp
 
 ---
 
+## Stage 6: Usability enhancements
+
+**Scope:** Simplify setup (no-Docker defaults); user-friendly wizards/onboarding; lightweight modes without Spark/Java; CLI presets; one-click demos.
+
+**What's implemented:**
+- **Presets:** `configs/presets.yaml` (quick-demo, full-demo, lightweight). Use **`--preset <name>`** with `demo_loop` or `one_click_demo`.
+- **One-click demo:** **`scripts/one_click_demo.py`** — runs cognition loop + optional `--reasoning-query` in one go; no Docker when using default preset.
+- **GUI:** Lightweight mode checkbox in Setup Wizard; when on, all features use in-memory fallback (dry-run).
+- **Fallback:** All features work in dry-run; Spark/Java optional.
+
+**Run:**
+- **`python scripts/one_click_demo.py --preset quick-demo`**
+- **`python -m src.agi_loop.demo_loop --preset lightweight --dry-run --ticks 3`**
+
+**Tests:** **`tests/test_stage6_usability.py`** (one_click_demo, preset quick-demo, presets config).
+
+---
+
+## Stage 7: Real-world integrations
+
+**Scope:** Connectors (web APIs, RSS); example apps (Q&A bot, knowledge explorer); reasoning output for apps (JSON).
+
+**What's implemented:**
+- **Connectors:** **`src/ingestion/connectors.py`** — `fetch_urls`, `rss_feed_to_chunks`; **`configs/ingestion_sources.yaml`** for RSS/URL lists.
+- **API:** **`POST /reasoning`** accepts **`output_format: "app"`** for full JSON (activated_nodes, graph_context, hypotheses).
+- **Example apps:** **`scripts/app_qa_bot.py`** (Q&A loop, single or interactive); **`scripts/app_knowledge_explorer.py`** (query → subgraph JSON).
+
+**Run:**
+- **`python scripts/app_qa_bot.py --query "What is a knowledge graph?"`**
+- **`python scripts/app_knowledge_explorer.py "gravity" --output out.json`**
+
+**Tests:** **`tests/test_stage7_integrations.py`** (connectors, knowledge explorer, Q&A bot).
+
+---
+
+## Stage 8: Optimization and scaling
+
+**Scope:** Full distributed (K8s HPA); performance tuning; efficiency metrics; GPU benchmark.
+
+**What's implemented:**
+- **K8s:** **`infra/k8s/hpa.yaml`** — HorizontalPodAutoscaler for goat-app (CPU/memory targets).
+- **Monitoring:** **`src/monitoring/metrics.py`** — `ticks_per_second`, `graph_size_nodes` gauges.
+- **GPU benchmark:** **`scripts/run_gpu_benchmark.py`** — short cognition loop with forces; set `GOAT_USE_GPU=1` or config for CUDA.
+
+**Run:**
+- **`python scripts/run_gpu_benchmark.py`** (CPU fallback if no CUDA)
+- **`kubectl apply -f infra/k8s/hpa.yaml -n <namespace>`** (after deployment)
+
+**Tests:** **`tests/test_stage8_scale.py`** (medium graph demo, gpu benchmark script, efficiency metrics).
+
+---
+
+## Stage 9: Community and ecosystem
+
+**Scope:** Plugin system; extensions gallery; CI already in place (see .github/workflows/ci.yml).
+
+**What's implemented:**
+- **Plugins:** **`src/plugins/__init__.py`** — `load_plugin(name)`, `load_all_plugins(config_root)`; **`configs/plugins.yaml`** (`plugins.enabled`); **`src/plugins/example_hook.py`** (PLUGIN_HOOKS).
+- **Docs:** **`docs/extensions.md`** — extensions gallery (connectors, apps, presets, API output_format).
+
+**Run:**
+- Enable a plugin by adding its name to `configs/plugins.yaml` under `plugins.enabled`. Hook call sites can be added in reasoning/API later.
+
+**Tests:** **`tests/test_stage9_plugins.py`** (load example_hook, load_all_plugins, plugins config).
+
+---
+
+## Stage 10: Advanced evolution
+
+**Scope:** Meta-reasoning (curiosity over repo); self-assessment demos.
+
+**What's implemented:**
+- **Meta-reasoning:** **`src/reasoning/meta_reasoning.py`** — `repo_curiosity_scan`, `roadmap_to_hypotheses`, `run_meta_reasoning` (scan repo + ROADMAP → hypotheses).
+- **Self-assessment:** **`scripts/self_assessment_demo.py`** — runs benchmarks, writes **`examples/self_assessment_report.md`**.
+
+**Run:**
+- **`python -c "from src.reasoning.meta_reasoning import run_meta_reasoning; from pathlib import Path; print(run_meta_reasoning(Path('.')))"`**
+- **`python scripts/self_assessment_demo.py`**
+
+**Tests:** **`tests/test_stage10_meta.py`** (repo_curiosity_scan, roadmap_to_hypotheses, run_meta_reasoning, self_assessment_demo).
+
+---
+
 ## After each stage
 
 1. Run tests: **`python -m pytest -q`** (or **-v**).
