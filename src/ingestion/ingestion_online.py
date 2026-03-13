@@ -33,17 +33,30 @@ def web_search(query: str, *, max_results: int = 5, api_key: str | None = None) 
     try:
         import os
         import requests
+
         key = api_key or os.environ.get("GOAT_SEARCH_API_KEY") or os.environ.get("GOOGLE_API_KEY")
         if key:
             # Google Custom Search JSON API
             url = "https://www.googleapis.com/customsearch/v1"
-            params = {"key": key, "q": query.strip()[:200], "cx": os.environ.get("GOAT_CSE_ID", ""), "num": max_results}
+            params = {
+                "key": key,
+                "q": query.strip()[:200],
+                "cx": os.environ.get("GOAT_CSE_ID", ""),
+                "num": max_results,
+            }
             r = requests.get(url, params=params, timeout=10)
             if r.ok:
                 data = r.json()
                 items = data.get("items", [])
-                return [item.get("snippet", "") or item.get("title", "") for item in items if item.get("snippet") or item.get("title")]
+                return [
+                    item.get("snippet", "") or item.get("title", "")
+                    for item in items
+                    if item.get("snippet") or item.get("title")
+                ]
         # Fallback: no-op (caller can mock or use another backend)
+        return []
+    except Exception as e:
+        logger.warning("web_search failed: %s", e)
         return []
 
 
@@ -88,9 +101,6 @@ def arxiv_search(query: str, *, max_results: int = 5) -> list[str]:
         return texts
     except Exception as e:
         logger.warning("arxiv_search failed: %s", e)
-        return []
-    except Exception as e:
-        logger.warning("web_search failed: %s", e)
         return []
 
 

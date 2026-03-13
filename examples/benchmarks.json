@@ -1,0 +1,21 @@
+[
+  {
+    "id": "tension_conflict",
+    "description": "Conflicting statements about a concept to induce tension.",
+    "query": "Gravity pulls objects together but here it seems to push them apart. What explains this contradiction?",
+    "expected_substring": "conflict"
+  },
+  {
+    "id": "commonsense_supports",
+    "description": "Commonsense-style question about support relationships.",
+    "query": "Wikipedia supports free knowledge and Wikidata supports structured facts. How are they related?",
+    "expected_substring": "supports"
+  },
+  {
+    "id": "curiosity_missing_link",
+    "description": "Missing link that should encourage exploration.",
+    "query": "The system mentions quantum gravity but never discusses spacetime curvature. What might be missing?",
+    "expected_substring": "missing"
+  }
+]
+
