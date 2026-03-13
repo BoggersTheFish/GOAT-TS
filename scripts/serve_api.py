@@ -13,11 +13,17 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 try:
-    from fastapi import FastAPI, HTTPException
+    from fastapi import FastAPI, HTTPException, Response
     from pydantic import BaseModel, Field
 except ImportError:
     print("FastAPI and pydantic required. Install with: pip install fastapi uvicorn", file=sys.stderr)
     sys.exit(1)
+
+try:
+    from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+except ImportError:
+    CONTENT_TYPE_LATEST = "text/plain; version=0.0.4"
+    generate_latest = None
 
 app = FastAPI(title="GOAT-TS API", description="Cognition demo and reasoning endpoints", version="0.1.0")
 
@@ -95,6 +101,21 @@ def reasoning_endpoint(body: ReasoningRequest) -> dict:
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+@app.get("/metrics")
+def metrics() -> Response:
+    """
+    Prometheus metrics endpoint.
+
+    Exposes process and application metrics when `prometheus_client` is
+    installed; otherwise returns an empty payload with a Prometheus-compatible
+    content type so scraping still behaves predictably.
+    """
+    if generate_latest is None:
+        return Response(b"", media_type=CONTENT_TYPE_LATEST)
+    payload = generate_latest()
+    return Response(payload, media_type=CONTENT_TYPE_LATEST)
 
 
 if __name__ == "__main__":

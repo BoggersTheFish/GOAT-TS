@@ -12,6 +12,7 @@ from src.graph.client import NebulaGraphClient
 from src.graph.cognition import EDGE_IN_WAVE, WAVE_SOURCE_REASONING
 from src.graph.models import Edge, MemoryState, Node, Triple, Wave
 from src.ingestion.llm_extract import TripleExtractor
+from src.monitoring.metrics import graph_edge_count, graph_node_count, query_latency_seconds, tension_score
 from src.reasoning.cache import CacheAdapter
 from src.reasoning.tension import TensionResult, compute_tension
 from src.utils import load_yaml_config
@@ -369,99 +370,111 @@ def run_reasoning_loop(query: str, config_root: Path, live: bool = False) -> Rea
     reasoning_config = load_yaml_config(config_root / "configs" / "reasoning.yaml")["reasoning"]
     cache = CacheAdapter(config_root / "configs" / "reasoning.yaml")
     cache_key = f"query::{live}::{query.strip().lower()}"
-    cached = cache.get(cache_key)
-    if cached:
-        return ReasoningResponse(
-            query=cached["query"],
-            activated_nodes=cached["activated_nodes"],
-            hypotheses=[Hypothesis(**item) for item in cached["hypotheses"]],
-            tension=TensionResult(**cached["tension"]),
-            graph_context=cached["graph_context"],
-        )
 
-    extractor = TripleExtractor(config_root / "configs" / "llm.yaml")
-    extract_result = extractor.extract(query)
-    activated = activate_from_query(query, extract_result.triples)
+    with query_latency_seconds.time():
+        cached = cache.get(cache_key)
+        if cached:
+            cached_tension = TensionResult(**cached["tension"])
+            # Keep gauges in sync even on cache hits.
+            tension_score.set(cached_tension.score)
+            graph_node_count.set(cached["graph_context"].get("nodes", 0))
+            graph_edge_count.set(cached["graph_context"].get("edges", 0))
+            return ReasoningResponse(
+                query=cached["query"],
+                activated_nodes=cached["activated_nodes"],
+                hypotheses=[Hypothesis(**item) for item in cached["hypotheses"]],
+                tension=cached_tension,
+                graph_context=cached["graph_context"],
+            )
 
-    # Memory-first retrieval: only expand the search terms if the graph does not
-    # already contain a tangible local match for the query.
-    graph_nodes, graph_edges = retrieve_graph_context(query, config_root, live=live)
-    if not graph_nodes:
-        seed_terms = list(_query_terms(query)) + extractor.suggest_search_terms(query, max_terms=10)
-        graph_nodes, graph_edges = retrieve_graph_context(
-            query,
-            config_root,
-            live=live,
-            extra_keywords=seed_terms if live else seed_terms,
-        )
-    terms = _query_terms(query)
-    # Only add graph labels that actually match the query (avoid flooding with unrelated cluster concepts)
-    graph_activations = [
-        node.label for node in graph_nodes
-        if any(t in node.label.lower() for t in terms)
-    ]
-    activated = sorted(set(activated + graph_activations))
+        extractor = TripleExtractor(config_root / "configs" / "llm.yaml")
+        extract_result = extractor.extract(query)
+        activated = activate_from_query(query, extract_result.triples)
 
-    # Build tension over a bounded set so score is meaningful (prefer nodes that have edges)
-    edge_endpoint_labels = set()
-    for edge in graph_edges:
-        for node in graph_nodes:
-            if node.node_id == edge.src_id:
-                edge_endpoint_labels.add(node.label)
-            if node.node_id == edge.dst_id:
-                edge_endpoint_labels.add(node.label)
-    tension_cap = 50
-    if len(activated) > tension_cap:
-        # Prefer: query-matching labels that are edge endpoints, then any edge endpoint, then query-matching
-        in_graph = [a for a in activated if a in edge_endpoint_labels]
-        in_graph = in_graph[:tension_cap]
-        remaining = tension_cap - len(in_graph)
-        if remaining > 0:
-            others = [a for a in activated if a not in edge_endpoint_labels][:remaining]
-            tension_activated = sorted(set(in_graph + others))
+        # Memory-first retrieval: only expand the search terms if the graph does not
+        # already contain a tangible local match for the query.
+        graph_nodes, graph_edges = retrieve_graph_context(query, config_root, live=live)
+        if not graph_nodes:
+            seed_terms = list(_query_terms(query)) + extractor.suggest_search_terms(query, max_terms=10)
+            graph_nodes, graph_edges = retrieve_graph_context(
+                query,
+                config_root,
+                live=live,
+                extra_keywords=seed_terms if live else seed_terms,
+            )
+        terms = _query_terms(query)
+        # Only add graph labels that actually match the query (avoid flooding with unrelated cluster concepts)
+        graph_activations = [
+            node.label for node in graph_nodes
+            if any(t in node.label.lower() for t in terms)
+        ]
+        activated = sorted(set(activated + graph_activations))
+
+        # Build tension over a bounded set so score is meaningful (prefer nodes that have edges)
+        edge_endpoint_labels = set()
+        for edge in graph_edges:
+            for node in graph_nodes:
+                if node.node_id == edge.src_id:
+                    edge_endpoint_labels.add(node.label)
+                if node.node_id == edge.dst_id:
+                    edge_endpoint_labels.add(node.label)
+        tension_cap = 50
+        if len(activated) > tension_cap:
+            # Prefer: query-matching labels that are edge endpoints, then any edge endpoint, then query-matching
+            in_graph = [a for a in activated if a in edge_endpoint_labels]
+            in_graph = in_graph[:tension_cap]
+            remaining = tension_cap - len(in_graph)
+            if remaining > 0:
+                others = [a for a in activated if a not in edge_endpoint_labels][:remaining]
+                tension_activated = sorted(set(in_graph + others))
+            else:
+                tension_activated = in_graph
         else:
-            tension_activated = in_graph
-    else:
-        tension_activated = activated
+            tension_activated = activated
 
-    positions = {
-        name: np.asarray([idx + 1.0, idx * 0.5 + 1.0, 0.25], dtype=np.float32)
-        for idx, name in enumerate(tension_activated)
-    }
-    expected_distances = {}
-    for index in range(max(0, len(tension_activated) - 1)):
-        expected_distances[(tension_activated[index], tension_activated[index + 1])] = 1.0
-    for edge in graph_edges:
-        src_label = next((node.label for node in graph_nodes if node.node_id == edge.src_id), None)
-        dst_label = next((node.label for node in graph_nodes if node.node_id == edge.dst_id), None)
-        if src_label and dst_label and src_label in positions and dst_label in positions:
-            expected_distances[(src_label, dst_label)] = max(0.25, 1.0 / max(edge.weight, 0.01))
-    tension = compute_tension(positions, expected_distances)
-    hypotheses = generate_hypotheses(
-        tension,
-        reasoning_config["hypothesis_count"],
-    )
+        positions = {
+            name: np.asarray([idx + 1.0, idx * 0.5 + 1.0, 0.25], dtype=np.float32)
+            for idx, name in enumerate(tension_activated)
+        }
+        expected_distances = {}
+        for index in range(max(0, len(tension_activated) - 1)):
+            expected_distances[(tension_activated[index], tension_activated[index + 1])] = 1.0
+        for edge in graph_edges:
+            src_label = next((node.label for node in graph_nodes if node.node_id == edge.src_id), None)
+            dst_label = next((node.label for node in graph_nodes if node.node_id == edge.dst_id), None)
+            if src_label and dst_label and src_label in positions and dst_label in positions:
+                expected_distances[(src_label, dst_label)] = max(0.25, 1.0 / max(edge.weight, 0.01))
+        tension = compute_tension(positions, expected_distances)
+        hypotheses = generate_hypotheses(
+            tension,
+            reasoning_config["hypothesis_count"],
+        )
 
-    response = ReasoningResponse(
-        query=query,
-        activated_nodes=activated,
-        hypotheses=hypotheses,
-        tension=tension,
-        graph_context={"nodes": len(graph_nodes), "edges": len(graph_edges)},
-    )
-    cache.set(
-        cache_key,
-        {
-            "query": query,
-            "activated_nodes": response.activated_nodes,
-            "hypotheses": [asdict(hypothesis) for hypothesis in response.hypotheses],
-            "tension": {
-                "score": response.tension.score,
-                "high_tension_pairs": response.tension.high_tension_pairs,
+        response = ReasoningResponse(
+            query=query,
+            activated_nodes=activated,
+            hypotheses=hypotheses,
+            tension=tension,
+            graph_context={"nodes": len(graph_nodes), "edges": len(graph_edges)},
+        )
+        cache.set(
+            cache_key,
+            {
+                "query": query,
+                "activated_nodes": response.activated_nodes,
+                "hypotheses": [asdict(hypothesis) for hypothesis in response.hypotheses],
+                "tension": {
+                    "score": response.tension.score,
+                    "high_tension_pairs": response.tension.high_tension_pairs,
+                },
+                "graph_context": response.graph_context,
             },
-            "graph_context": response.graph_context,
-        },
-    )
+        )
+
+    # Update Prometheus gauges outside the timer context to reflect the latest state.
+    tension_score.set(response.tension.score)
+    graph_node_count.set(response.graph_context.get("nodes", 0))
+    graph_edge_count.set(response.graph_context.get("edges", 0))
 
     # Persist reasoning episode to graph when live: one wave per query, in_wave edges to activated concepts
     if live and graph_nodes and hypotheses:

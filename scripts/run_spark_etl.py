@@ -43,6 +43,12 @@ def main() -> None:
         default=16,
         help="Number of Spark shuffle/partition for output (default 16).",
     )
+    parser.add_argument(
+        "--compression",
+        type=str,
+        default="snappy",
+        help="Compression codec for parquet output (e.g. snappy, gzip, zstd).",
+    )
     args = parser.parse_args()
 
     input_path = args.input_path if args.input_path.is_absolute() else ROOT / args.input_path
@@ -57,7 +63,10 @@ def main() -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     spark = build_spark_session(app_name="goat-spark-etl")
     df = spark.read.text(str(input_path)).repartition(args.partitions)
-    df.write.mode("overwrite").parquet(str(output_path))
+    writer = df.write.mode("overwrite")
+    if args.compression:
+        writer = writer.option("compression", args.compression)
+    writer.parquet(str(output_path))
     spark.stop()
     print(f"Wrote parquet to {output_path}")
 

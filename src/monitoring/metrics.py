@@ -20,5 +20,15 @@ graph_edge_count = Gauge(
 
 simulation_steps_total = Counter(
     "ts_simulation_steps_total",
-    "Total number of simulation steps executed.",
+    "Total number of cognition/simulation steps executed.",
+)
+
+activation_coherence = Gauge(
+    "ts_activation_coherence",
+    "Current average activation coherence for the active subgraph.",
+)
+
+tension_score = Gauge(
+    "ts_tension_score",
+    "Current global tension score for the graph or subgraph.",
 )

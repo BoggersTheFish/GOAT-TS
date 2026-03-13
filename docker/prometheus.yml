@@ -1,0 +1,9 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: "goat-ts"
+    static_configs:
+      # By default, scrape the FastAPI /metrics endpoint exposed by scripts/serve_api.py
+      - targets: ["host.docker.internal:8000"]
+

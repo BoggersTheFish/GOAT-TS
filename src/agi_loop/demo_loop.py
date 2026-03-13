@@ -20,6 +20,7 @@ from src.activation import (
 from src.graph.client import NebulaGraphClient
 from src.graph.models import Edge, MemoryState, Node
 from src.memory_manager import memory_tick
+from src.monitoring.metrics import activation_coherence, simulation_steps_total, tension_score
 from src.simulation.gravity import (
     build_state,
     compute_forces,
@@ -361,6 +362,15 @@ def run_demo(
         coherence = _compute_coherence_stub(active_sub)
         tension_result = _compute_tension_result(nodes, edges)
         tension = tension_result.score if tension_result else _compute_tension_stub(nodes, edges)
+
+        # Update Prometheus metrics (no-op if not scraped)
+        try:
+            activation_coherence.set(coherence)
+            tension_score.set(tension)
+            simulation_steps_total.inc()
+        except Exception:
+            # Metrics are optional; never break the cognition loop if a collector is missing.
+            pass
 
         # Step 7: goal generator (prioritized questions from tension)
         if enable_goal_generator and tension_result and tension_result.high_tension_pairs:
