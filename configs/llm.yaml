@@ -1,10 +1,42 @@
 llm:
+  # Default backend for extraction and query-term suggestions.
+  # Supported providers (config-driven):
+  # - huggingface: local or remote Transformers pipeline
+  # - ollama: local Ollama server (via LangChain or HTTP)
+  # - langchain: any LangChain LLM configured separately
   provider: huggingface
+
+  # Backwards-compatible defaults for HuggingFace Transformers.
   model_name: google/flan-t5-base
   embedding_model: sentence-transformers/all-MiniLM-L6-v2
   max_tokens: 512
   batch_size: 8
   device: cpu
+
+  # When false, TripleExtractor falls back to regex-only extraction and never
+  # imports Transformers/LangChain. Enable this explicitly for LLM-based runs.
   enable_model_inference: false
+
+  # Optional LangChain/Ollama integration. When use_langchain is true and
+  # provider is "ollama" or "langchain", TripleExtractor will try to build a
+  # simple text2text backend using langchain-community. If imports or runtime
+  # configuration fail, it falls back to regex extraction without error.
   use_langchain: true
+
+  # Regex fallback is always available and used when LLM inference is
+  # disabled or unavailable.
   fallback_extractor: regex
+
+  # Optional multi-backend configuration. These sections are read by higher-
+  # level components (e.g. reasoning) rather than TripleExtractor directly,
+  # so they are safe extensions to the existing schema.
+  backends:
+    huggingface:
+      model_name: google/flan-t5-base
+      device: cpu
+    ollama:
+      model: llama3
+      base_url: "http://localhost:11434"
+    langchain:
+      model_name: "gpt-4-mini"
+      # provider-specific configuration would go here (API keys, endpoints, etc.).

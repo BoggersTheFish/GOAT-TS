@@ -751,7 +751,50 @@ elif page == "Monitoring & Debug":
     st.markdown("[Open Debug Window (right-click → Open link in new tab)](/?page=debug)")
 
     with st.expander("Metrics (stub)"):
-        st.caption("Prometheus metrics are stubbed. See README and src/monitoring/metrics.py.")
+        st.caption("Prometheus metrics are available at /metrics when the API server is running.")
+        st.caption("See src/monitoring/metrics.py and docker/docker-compose.yml for Prometheus/Grafana stubs.")
+
+    with st.expander("Provenance tracing (concept → waves)"):
+        st.caption("Inspect which cognition waves contributed to a concept (requires live NebulaGraph).")
+        concept_label = st.text_input("Concept label contains", value="", key="prov_label")
+        if st.button("Trace provenance"):
+            if not concept_label.strip():
+                st.warning("Enter a label substring to search for concept nodes.")
+            else:
+                try:
+                    from src.graph.client import NebulaGraphClient
+
+                    client = NebulaGraphClient(config_path=str(ROOT / "configs" / "graph.yaml"), dry_run_override=False)
+                    try:
+                        nodes = client.list_nodes_by_label_keywords([concept_label], limit=20)
+                        if not nodes:
+                            st.info("No matching concept nodes found.")
+                        else:
+                            target_ids = {n.node_id for n in nodes}
+                            in_wave_edges = client.list_in_wave_edges(limit=5000)
+                            wave_ids = {e.dst_id for e in in_wave_edges if e.src_id in target_ids}
+                            if not wave_ids:
+                                st.info("No in_wave provenance edges found for matching concepts.")
+                            else:
+                                waves = [w for w in client.list_waves(limit=500) if w.wave_id in wave_ids]
+                                st.write("Matching concepts")
+                                st.table([{"node_id": n.node_id, "label": n.label, "activation": round(n.activation, 3)} for n in nodes])
+                                st.write("Provenance waves")
+                                st.table(
+                                    [
+                                        {
+                                            "wave_id": w.wave_id,
+                                            "label": w.label,
+                                            "source": w.source,
+                                            "tension": round(w.tension, 4),
+                                        }
+                                        for w in waves
+                                    ]
+                                )
+                    finally:
+                        client.close()
+                except Exception as e:
+                    st.error(str(e))
 
 # ---------- Export & API ----------
 elif page == "Export & API":

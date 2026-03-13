@@ -33,32 +33,63 @@ class ExtractionResult:
 
 
 class TripleExtractor:
-    """Best-effort extractor with transformer and regex fallbacks."""
+    """Best-effort extractor with multi-LLM and regex fallbacks."""
 
     def __init__(self, config_path: str | Path = "configs/llm.yaml") -> None:
         self.config = load_yaml_config(config_path)["llm"]
         self._pipeline = None
 
     def _build_pipeline(self) -> None:
+        """Initialize a text2text backend based on llm.provider, or disable it."""
         if self._pipeline is not None:
             return
         if not self.config.get("enable_model_inference", False):
             self._pipeline = False
             return
 
-        try:
-            from transformers import pipeline
-        except ImportError:
-            self._pipeline = False
+        provider = str(self.config.get("provider", "huggingface")).lower()
+        use_langchain = bool(self.config.get("use_langchain", False))
+
+        if provider == "huggingface":
+            try:
+                from transformers import pipeline
+            except ImportError:
+                self._pipeline = False
+                return
+
+            device = self.config.get("device", "cpu")
+            pipeline_device = 0 if device in {"cuda", "gpu"} else -1
+            model_name = self.config.get("model_name") or "google/flan-t5-base"
+            self._pipeline = pipeline(
+                "text2text-generation",
+                model=model_name,
+                device=pipeline_device,
+            )
             return
 
-        device = self.config.get("device", "cpu")
-        pipeline_device = 0 if device in {"cuda", "gpu"} else -1
-        self._pipeline = pipeline(
-            "text2text-generation",
-            model=self.config["model_name"],
-            device=pipeline_device,
-        )
+        if provider in {"ollama", "langchain"} and use_langchain:
+            try:
+                from langchain_community.llms import Ollama
+            except ImportError:
+                # LangChain not available; fall back to regex-only.
+                self._pipeline = False
+                return
+
+            model_cfg = (self.config.get("backends") or {}).get("ollama", {})
+            model = model_cfg.get("model", "llama3")
+            base_url = model_cfg.get("base_url", "http://localhost:11434")
+            llm = Ollama(model=model, base_url=base_url)
+
+            def _ollama_pipeline(prompt: str, max_new_tokens: int = 256, truncation: bool = True):
+                _ = truncation  # unused but kept for API parity
+                text = llm(prompt, max_tokens=max_new_tokens)
+                return [{"generated_text": text}]
+
+            self._pipeline = _ollama_pipeline
+            return
+
+        # Unknown or unsupported provider: mark as disabled so regex fallback is used.
+        self._pipeline = False
 
     def _extract_with_model(self, text: str) -> ExtractionResult | None:
         self._build_pipeline()

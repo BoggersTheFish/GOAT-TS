@@ -63,8 +63,12 @@ def curiosity_query(
     max_results: int = 5,
 ) -> dict:
     """
-    Run a curiosity-driven query: web search + optional extraction.
-    Uses query_handler.handle_query when available.
+    Run a curiosity-driven query: graph-aware search + optional external APIs.
+
+    Priority:
+    1. `query_handler.handle_query` when available (graph + web hybrid).
+    2. `query_handler.search_and_fetch` as a lighter-weight web snippet fetch.
+    3. Ingestion plugins such as wikipedia/arXiv via ingestion_online.
     """
     try:
         from src.graph.query_handler import handle_query
@@ -78,11 +82,31 @@ def curiosity_query(
         )
         return {"triggered": True, "stats": stats, "query": query}
     except ImportError:
-        logger.debug("query_handler not available for curiosity_query")
+        logger.debug("query_handler.handle_query not available for curiosity_query")
     try:
         from src.graph.query_handler import search_and_fetch
+
         snippets = search_and_fetch(query, max_results=max_results, api_key=api_key)
-        return {"triggered": True, "snippets": len(snippets), "query": query}
+        if snippets:
+            return {"triggered": True, "snippets": len(snippets), "query": query}
     except ImportError:
-        pass
+        logger.debug("query_handler.search_and_fetch not available; falling back to ingestion plugins")
+
+    # Final fallback: use ingestion_online plugins (e.g. web_search, arxiv_search)
+    try:
+        from src.ingestion.ingestion_online import arxiv_search, web_search
+
+        web_snippets = web_search(query, max_results=max_results, api_key=api_key)
+        arxiv_texts = arxiv_search(query, max_results=max_results)
+        total = len(web_snippets) + len(arxiv_texts)
+        if total:
+            return {
+                "triggered": True,
+                "snippets": total,
+                "query": query,
+                "sources": {"web": len(web_snippets), "arxiv": len(arxiv_texts)},
+            }
+    except Exception as exc:
+        logger.debug("Curiosity ingestion plugins failed: %s", exc)
+
     return {"triggered": False, "query": query}

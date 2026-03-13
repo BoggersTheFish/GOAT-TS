@@ -45,6 +45,50 @@ def web_search(query: str, *, max_results: int = 5, api_key: str | None = None) 
                 return [item.get("snippet", "") or item.get("title", "") for item in items if item.get("snippet") or item.get("title")]
         # Fallback: no-op (caller can mock or use another backend)
         return []
+
+
+def arxiv_search(query: str, *, max_results: int = 5) -> list[str]:
+    """
+    Lightweight arXiv search plugin.
+
+    Uses the public arXiv API (no key required) to fetch up to max_results
+    entries and returns a list of concatenated title + abstract strings.
+    Never raises on network/parse errors; failures are logged and an empty
+    list is returned so ingestion can safely proceed without arXiv.
+    """
+    if not query or not query.strip():
+        return []
+    try:
+        import urllib.parse
+        import xml.etree.ElementTree as ET
+
+        import requests
+
+        base = "http://export.arxiv.org/api/query"
+        params = {
+            "search_query": f"all:{query.strip()}",
+            "start": 0,
+            "max_results": max_results,
+        }
+        url = f"{base}?{urllib.parse.urlencode(params)}"
+        resp = requests.get(url, timeout=10)
+        if not resp.ok:
+            return []
+        root = ET.fromstring(resp.text)
+        ns = {"a": "http://www.w3.org/2005/Atom"}
+        texts: list[str] = []
+        for entry in root.findall("a:entry", ns):
+            title_el = entry.find("a:title", ns)
+            summary_el = entry.find("a:summary", ns)
+            title = (title_el.text or "").strip() if title_el is not None else ""
+            summary = (summary_el.text or "").strip() if summary_el is not None else ""
+            combined = " ".join(part for part in (title, summary) if part)
+            if combined:
+                texts.append(combined)
+        return texts
+    except Exception as e:
+        logger.warning("arxiv_search failed: %s", e)
+        return []
     except Exception as e:
         logger.warning("web_search failed: %s", e)
         return []

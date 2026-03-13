@@ -247,6 +247,7 @@ def run_demo(
     *,
     seed_ids: list[str],
     seed_labels: list[str],
+    goal_labels: list[str] | None = None,
     ticks: int = DEFAULT_TICKS,
     decay_rate: float = DEFAULT_DECAY_RATE,
     enable_forces: bool = False,
@@ -293,7 +294,7 @@ def run_demo(
             "No nodes in graph. Load data or use dry_run with synthetic graph."
         )
 
-    # Seed selection
+    # Seed selection (including optional goal-directed labels)
     seed_nodes: list[Node] = []
     if seed_ids:
         seed_nodes = _seed_nodes_from_ids(client, seed_ids)
@@ -304,6 +305,17 @@ def run_demo(
             "No seed nodes matched (--seed-ids or --seed-labels). "
             "Provide at least one seed."
         )
+    # Goal-directed seeding: treat goal_labels as soft seeds that can expand the
+    # activation frontier without overriding explicit seeds.
+    goal_labels = goal_labels or []
+    if goal_labels:
+        goal_nodes = _seed_nodes_from_label_keywords(client, goal_labels, limit=500)
+        existing_ids = {n.node_id for n in seed_nodes}
+        for gn in goal_nodes:
+            if gn.node_id not in existing_ids:
+                seed_nodes.append(gn)
+                existing_ids.add(gn.node_id)
+
     seed_id_list = [n.node_id for n in seed_nodes]
     # Boost seed activations to 1.0 in our working set
     seed_set = set(seed_id_list)
@@ -487,6 +499,12 @@ def main() -> int:
         help="Comma-separated label keywords, e.g. apple,fruit.",
     )
     parser.add_argument(
+        "--goal-labels",
+        type=str,
+        default="",
+        help="Comma-separated goal label keywords to bias activation (treated as additional soft seeds).",
+    )
+    parser.add_argument(
         "--seed-ids",
         type=str,
         default="",
@@ -549,6 +567,7 @@ def main() -> int:
 
     seed_ids = [s.strip() for s in args.seed_ids.split(",") if s.strip()]
     seed_labels = [s.strip() for s in args.seed_labels.split(",") if s.strip()]
+    goal_labels = [s.strip() for s in args.goal_labels.split(",") if s.strip()]
     if not seed_ids and not seed_labels:
         # Default seeds for dry-run: use first few concept nodes
         if args.dry_run:
@@ -569,6 +588,7 @@ def main() -> int:
             client,
             seed_ids=seed_ids,
             seed_labels=seed_labels,
+            goal_labels=goal_labels,
             ticks=args.ticks,
             decay_rate=args.decay_rate,
             enable_forces=args.enable_forces,
