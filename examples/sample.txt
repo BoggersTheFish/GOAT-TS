@@ -1,0 +1,5 @@
+GOAT-TS is graph cognition kernel
+GOAT-TS uses deterministic IDs
+graph cognition kernel has provenance
+provenance supports receipts
+This line cannot be parsed as a supported claim

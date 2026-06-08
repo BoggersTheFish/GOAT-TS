@@ -1,0 +1,168 @@
+{
+  "activation": {
+    "129a34fb-0508-c2c0-9e16-36ef660d9444": 1.0,
+    "e8e9ee69-7da5-440b-3846-e560e904f967": 0.5
+  },
+  "candidates": [
+    {
+      "id": "15e86dbe-593b-a9a5-4974-6b731e9c4e3e",
+      "object": "receipts",
+      "parser": "bounded-regex-v1",
+      "predicate": "supports",
+      "raw_text": "provenance supports receipts",
+      "subject": "provenance"
+    },
+    {
+      "id": "22e6ba32-19c8-72f0-e3fa-0e2bc6f58460",
+      "object": "deterministic IDs",
+      "parser": "bounded-regex-v1",
+      "predicate": "uses",
+      "raw_text": "GOAT-TS uses deterministic IDs",
+      "subject": "GOAT-TS"
+    },
+    {
+      "id": "28600cf1-f96d-e573-a77c-a4c7a0d21286",
+      "object": "provenance",
+      "parser": "bounded-regex-v1",
+      "predicate": "has",
+      "raw_text": "graph cognition kernel has provenance",
+      "subject": "graph cognition kernel"
+    },
+    {
+      "id": "6560ac84-d282-8d50-36e8-2fff88564bff",
+      "object": "graph cognition kernel",
+      "parser": "bounded-regex-v1",
+      "predicate": "is",
+      "raw_text": "GOAT-TS is graph cognition kernel",
+      "subject": "GOAT-TS"
+    }
+  ],
+  "edges": [
+    {
+      "id": "3af79c00-a77e-6f75-00d9-427a6c595d95",
+      "predicate": "uses",
+      "provenance": [
+        "22e6ba32-19c8-72f0-e3fa-0e2bc6f58460",
+        "3d976d01-5078-b16b-55fe-f967473b9095"
+      ],
+      "source_id": "21faa302-0f38-dbde-b464-4fa6aa08b8da",
+      "target_id": "f22283ed-51d9-d3f0-0453-4acb4ba5f5c7",
+      "wave_id": "3d976d01-5078-b16b-55fe-f967473b9095"
+    },
+    {
+      "id": "400279b1-9a83-727b-e734-40a0b284c797",
+      "predicate": "is",
+      "provenance": [
+        "6560ac84-d282-8d50-36e8-2fff88564bff",
+        "3d976d01-5078-b16b-55fe-f967473b9095"
+      ],
+      "source_id": "21faa302-0f38-dbde-b464-4fa6aa08b8da",
+      "target_id": "31915e60-e547-cfdc-fbd2-c3aae67abe4c",
+      "wave_id": "3d976d01-5078-b16b-55fe-f967473b9095"
+    },
+    {
+      "id": "b89fb5f3-c7a3-c503-76b3-617f31bd3eb2",
+      "predicate": "has",
+      "provenance": [
+        "28600cf1-f96d-e573-a77c-a4c7a0d21286",
+        "3d976d01-5078-b16b-55fe-f967473b9095"
+      ],
+      "source_id": "31915e60-e547-cfdc-fbd2-c3aae67abe4c",
+      "target_id": "129a34fb-0508-c2c0-9e16-36ef660d9444",
+      "wave_id": "3d976d01-5078-b16b-55fe-f967473b9095"
+    },
+    {
+      "id": "e46e21c7-d05a-e816-e4a0-69f6798c3548",
+      "predicate": "supports",
+      "provenance": [
+        "15e86dbe-593b-a9a5-4974-6b731e9c4e3e",
+        "3d976d01-5078-b16b-55fe-f967473b9095"
+      ],
+      "source_id": "129a34fb-0508-c2c0-9e16-36ef660d9444",
+      "target_id": "e8e9ee69-7da5-440b-3846-e560e904f967",
+      "wave_id": "3d976d01-5078-b16b-55fe-f967473b9095"
+    }
+  ],
+  "id": "85174b09-ce52-c7e0-1d41-e6dbf93feddd",
+  "input": {
+    "path": "examples/sample.txt",
+    "sha256": "63ecb2a3b9e5f7631d5847328ce84437dbe9479439de8c5ded6344bf50cd8747"
+  },
+  "memory": {
+    "129a34fb-0508-c2c0-9e16-36ef660d9444": "active",
+    "21faa302-0f38-dbde-b464-4fa6aa08b8da": "deep",
+    "31915e60-e547-cfdc-fbd2-c3aae67abe4c": "deep",
+    "e8e9ee69-7da5-440b-3846-e560e904f967": "dormant",
+    "f22283ed-51d9-d3f0-0453-4acb4ba5f5c7": "deep"
+  },
+  "nodes": [
+    {
+      "activation": 1.0,
+      "id": "129a34fb-0508-c2c0-9e16-36ef660d9444",
+      "label": "provenance",
+      "memory_state": "active",
+      "provenance": [
+        "3d976d01-5078-b16b-55fe-f967473b9095"
+      ]
+    },
+    {
+      "activation": 0.0,
+      "id": "21faa302-0f38-dbde-b464-4fa6aa08b8da",
+      "label": "GOAT-TS",
+      "memory_state": "deep",
+      "provenance": [
+        "3d976d01-5078-b16b-55fe-f967473b9095"
+      ]
+    },
+    {
+      "activation": 0.0,
+      "id": "31915e60-e547-cfdc-fbd2-c3aae67abe4c",
+      "label": "graph cognition kernel",
+      "memory_state": "deep",
+      "provenance": [
+        "3d976d01-5078-b16b-55fe-f967473b9095"
+      ]
+    },
+    {
+      "activation": 0.5,
+      "id": "e8e9ee69-7da5-440b-3846-e560e904f967",
+      "label": "receipts",
+      "memory_state": "dormant",
+      "provenance": [
+        "3d976d01-5078-b16b-55fe-f967473b9095"
+      ]
+    },
+    {
+      "activation": 0.0,
+      "id": "f22283ed-51d9-d3f0-0453-4acb4ba5f5c7",
+      "label": "deterministic IDs",
+      "memory_state": "deep",
+      "provenance": [
+        "3d976d01-5078-b16b-55fe-f967473b9095"
+      ]
+    }
+  ],
+  "operation": "demo",
+  "repair_targets": [
+    {
+      "claim_id": null,
+      "id": "1baed552-0c02-358a-52a4-df117d39dd91",
+      "raw_text": "This line cannot be parsed as a supported claim",
+      "reason": "unsupported_or_failed_parse"
+    }
+  ],
+  "tension": {
+    "3af79c00-a77e-6f75-00d9-427a6c595d95": 0.0,
+    "400279b1-9a83-727b-e734-40a0b284c797": 0.0,
+    "b89fb5f3-c7a3-c503-76b3-617f31bd3eb2": 1.0,
+    "e46e21c7-d05a-e816-e4a0-69f6798c3548": 0.5
+  },
+  "version": "0.1.0",
+  "waves": [
+    {
+      "content_hash": "63ecb2a3b9e5f7631d5847328ce84437dbe9479439de8c5ded6344bf50cd8747",
+      "id": "3d976d01-5078-b16b-55fe-f967473b9095",
+      "source": "examples/sample.txt"
+    }
+  ]
+}
