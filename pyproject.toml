@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "goat-ts"
+version = "0.1.0"
+description = "A deterministic, receipt-first graph cognition kernel"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "BoggersTheFish" }]
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[project.scripts]
+goat-ts = "goat_ts.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["goat_ts*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/v01"]
+addopts = "-q"
